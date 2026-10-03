@@ -3,19 +3,39 @@ import AppKit
 
 @MainActor
 final class SortViewModel: ObservableObject {
+    /// Detected from the Source Captures folder on every refresh, unless the build is locked to one layout.
     @Published var telescopeKind: TelescopeKind {
+        didSet { UserDefaults.standard.set(telescopeKind.rawValue, forKey: TelescopeKind.storageKey) }
+    }
+    @Published var layoutDetected = false
+    @Published var fileTypes: Set<SortFileType> = Set(SortFileType.defaults) {
         didSet {
-            UserDefaults.standard.set(telescopeKind.rawValue, forKey: TelescopeKind.storageKey)
+            UserDefaults.standard.set(fileTypes.map(\.rawValue).sorted(), forKey: Self.fileTypesKey)
             refresh()
         }
     }
+    private static let fileTypesKey = "SmartTelescopeSort.fileTypes"
+    /// Zip or tarball made before a sort; nil turns the archive backup off.
+    @Published var backupFormat: BackupFormat? = nil {
+        didSet { UserDefaults.standard.set(backupFormat?.rawValue ?? "off", forKey: Self.backupFormatKey) }
+    }
+    private static let backupFormatKey = "SmartTelescopeSort.backupFormat"
+    @Published var backupFailed = false
+
+    /// Offer free archiver apps when the built-in one is missing or a backup just failed.
+    var showArchiverLinks: Bool { !BackupFormat.systemArchiverAvailable || backupFailed }
+    @Published var libraryFolders: [LibraryFolder: URL] = [:]
+    @Published var savedDefaults: Set<LibraryFolder> = []
+    private var sessionFolders: [String: URL] = [:]
+    private var askedThisSession: Set<String> = []
+    private var processingIndex: [String: URL] = [:]
     @Published var sourcePath = CaptureSorter.defaultSource.path
     @Published var selectedYear = "all"
     @Published var selectedMonth = "all"
     @Published var years: [String] = []
     @Published var entries: [CaptureEntry] = []
     @Published var summary = SortSummary()
-    @Published var status = "Ready — pick which smart telescope these Captures came from."
+    @Published var status = "Ready."
     @Published var sourceAvailable = false
     @Published var excluded = "Targets …"
     @Published var isBusy = false
@@ -23,7 +43,9 @@ final class SortViewModel: ObservableObject {
     @Published var showSortConfirm = false
     @Published var showBackupOffer = false
     @Published var showPlanSheet = false
+    @Published var showDuplicateConfirm = false
     @Published var planItems: [SortPlanItem] = []
+    @Published var entryStatus: [String: String] = [:]
     @Published var pendingCreateYear: String?
 
     let months: [(id: String, title: String)] = [
@@ -51,6 +73,102 @@ final class SortViewModel: ObservableObject {
         } else {
             telescopeKind = .vaonis
         }
+        if let raw = UserDefaults.standard.stringArray(forKey: Self.fileTypesKey) {
+            fileTypes = Set(raw.compactMap(SortFileType.init(rawValue:)))
+        }
+        if let raw = UserDefaults.standard.string(forKey: Self.backupFormatKey) {
+            backupFormat = BackupFormat(rawValue: raw)
+        }
+        loadLibraryFolders()
+    }
+
+    var fileTypesSummary: String {
+        let chosen = SortFileType.allCases.filter(fileTypes.contains)
+        return chosen.isEmpty ? "no file types" : chosen.map(\.label).joined(separator: ", ")
+    }
+
+    // MARK: Library folders
+
+    /// Where Targets {year} folders live: the chosen Original Targets folder (or its parent when a Targets {year}
+    /// folder itself was picked), else the Source Captures folder.
+    var targetsRoot: URL {
+        guard let url = libraryFolders[.originals] else { return URL(fileURLWithPath: sourcePath) }
+        if url.lastPathComponent.range(of: #"^Targets \d{4}$"#, options: .regularExpression) != nil {
+            return url.deletingLastPathComponent()
+        }
+        return url
+    }
+
+    private func sessionKey(_ folder: LibraryFolder) -> String { folder.rawValue }
+
+    func loadLibraryFolders() {
+        libraryFolders = [:]
+        savedDefaults = []
+        for folder in LibraryFolder.allCases {
+            if let url = folder.saved() {
+                libraryFolders[folder] = url
+                savedDefaults.insert(folder)
+            } else if let url = sessionFolders[sessionKey(folder)] {
+                libraryFolders[folder] = url
+            }
+        }
+    }
+
+    /// Asks for any library folder with no default, once per session, after the window has appeared.
+    func askLibraryFoldersIfNeeded() {
+        let missing = LibraryFolder.allCases.filter {
+            libraryFolders[$0] == nil && !askedThisSession.contains(sessionKey($0))
+        }
+        guard !missing.isEmpty else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            for folder in missing { self?.chooseLibraryFolder(folder) }
+        }
+    }
+
+    func chooseLibraryFolder(_ folder: LibraryFolder) {
+        askedThisSession.insert(sessionKey(folder))
+        let start = libraryFolders[folder] ?? (folder == .originals
+            ? URL(fileURLWithPath: sourcePath)
+            : URL(fileURLWithPath: sourcePath).deletingLastPathComponent())
+        guard let choice = folder.ask(startingAt: start) else {
+            if libraryFolders[folder] == nil {
+                status = folder == .originals
+                    ? "Original Targets not set — Targets {year} folders stay inside Source Captures."
+                    : "\(folder.title) not set."
+            }
+            return
+        }
+        libraryFolders[folder] = choice.url
+        if choice.saveAsDefault {
+            folder.save(choice.url)
+            savedDefaults.insert(folder)
+            sessionFolders[sessionKey(folder)] = nil
+        } else {
+            folder.clearDefault()
+            savedDefaults.remove(folder)
+            sessionFolders[sessionKey(folder)] = choice.url
+        }
+        refresh()
+        status = "\(folder.title): \(choice.url.path)" + (choice.saveAsDefault ? " (saved as default)" : " (this session only)")
+    }
+
+    /// The processing folder for an object, matched by name without regard to case, spaces or dashes.
+    func processingFolder(for object: String) -> URL? {
+        processingIndex[Self.matchKey(object)]
+    }
+
+    private static func matchKey(_ name: String) -> String {
+        name.uppercased().replacingOccurrences(of: #"[\s_-]"#, with: "", options: .regularExpression)
+    }
+
+    private func indexProcessingFolders() {
+        processingIndex = [:]
+        guard let root = libraryFolders[.processing],
+              let kids = try? FileManager.default.contentsOfDirectory(
+                at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return }
+        for kid in kids where (try? kid.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+            processingIndex[Self.matchKey(kid.lastPathComponent)] = kid
+        }
     }
 
     var missingYears: [String] {
@@ -58,12 +176,38 @@ final class SortViewModel: ObservableObject {
     }
 
     var plannedCount: Int { summary.move + summary.replace }
-    var actionableCount: Int { summary.move + summary.replace + summary.keep }
+    var actionableCount: Int { summary.move + summary.replace + summary.duplicates }
+
+    var duplicateItems: [SortPlanItem] { planItems.filter(\.isDuplicate) }
+
+    var duplicatePrompt: String {
+        let folders = Set(duplicateItems.map(\.captureFolder)).count
+        var text = "\(summary.duplicates) image file(s) in \(folders) capture folder(s) are already in Targets"
+        if summary.older > 0 {
+            text += " (\(summary.duplicate) identical, \(summary.older) older than the Targets copy)"
+        }
+        return text + ". Delete them from Captures? They go to the Trash, the Targets copies are not touched, and capture folders left with no TIFF/FITS are removed."
+    }
+
+    static func statusText(_ items: [SortPlanItem]) -> String {
+        let duplicates = items.filter(\.isDuplicate).count
+        if duplicates == items.count {
+            return duplicates == 1 ? "Duplicate" : "\(duplicates) duplicates"
+        }
+        let new = items.filter { $0.action == .move }.count
+        let newer = items.filter { $0.action == .replace }.count
+        var parts: [String] = []
+        if new > 0 { parts.append("\(new) new") }
+        if newer > 0 { parts.append("\(newer) newer") }
+        if duplicates > 0 { parts.append("\(duplicates) duplicate") }
+        return parts.joined(separator: " · ")
+    }
 
     var spentCaptureNames: [String] {
         let grouped = Dictionary(grouping: entries, by: \.captureFolder)
+        let root = URL(fileURLWithPath: sourcePath)
         return grouped.compactMap { name, rows in
-            rows.allSatisfy { $0.files == 0 } ? name : nil
+            rows.allSatisfy { $0.files == 0 } && !CaptureSorter.holdsImages(root.appendingPathComponent(name)) ? name : nil
         }.sorted()
     }
 
@@ -78,12 +222,20 @@ final class SortViewModel: ObservableObject {
         do {
             let year = selectedYear == "all" ? nil : selectedYear
             let month = selectedMonth == "all" ? nil : selectedMonth
+            CaptureSorter.sortExtensions = fileTypes.reduce(into: []) { $0.formUnion($1.extensions) }
+            if lockedKind == nil {
+                let detected = TelescopeKind.detect(in: root)
+                layoutDetected = detected != nil
+                if let detected, detected != telescopeKind { telescopeKind = detected }
+            }
             let result = try CaptureSorter.scan(
                 kind: telescopeKind,
                 sourceRoot: root,
+                targetsRoot: targetsRoot,
                 year: year,
                 month: month
             )
+            indexProcessingFolders()
             entries = result.entries
             years = result.years
             excluded = result.excluded
@@ -91,9 +243,10 @@ final class SortViewModel: ObservableObject {
             let preview = CaptureSorter.preview(entries: entries)
             summary = preview.summary
             planItems = preview.plans
-            status = sourceAvailable
-                ? "Preview ready for \(telescopeKind.menuTitle) — no files have been moved."
-                : "Source unavailable."
+            entryStatus = Dictionary(grouping: planItems, by: \.entryID).mapValues(Self.statusText)
+            status = !sourceAvailable ? "Source unavailable."
+                : fileTypes.isEmpty ? "Tick at least one file type to move."
+                : "Preview ready for \(telescopeKind.menuTitle) (\(fileTypesSummary)) — no files have been moved."
             if selectedYear != "all", !years.contains(selectedYear), let first = years.first {
                 selectedYear = first
             }
@@ -102,14 +255,15 @@ final class SortViewModel: ObservableObject {
             entries = []
             summary = SortSummary()
             planItems = []
+            entryStatus = [:]
         }
     }
 
-    /// Opens the move/replace/keep list (does not move files).
+    /// Opens the per-folder file list (does not move files).
     func reviewFilePlan() {
         refresh()
         if planItems.isEmpty, entries.isEmpty {
-            status = "No plan yet — choose the matching telescope type and a Captures folder that holds that brand’s sessions, then try again."
+            status = "No plan yet — choose a Source Captures folder that holds telescope session folders, then try again."
             return
         }
         showPlanSheet = true
@@ -121,7 +275,7 @@ final class SortViewModel: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.directoryURL = URL(fileURLWithPath: sourcePath)
-        panel.message = telescopeKind.chooseFolderMessage
+        panel.message = "Choose the Captures folder that holds your telescope's session folders"
         if panel.runModal() == .OK, let url = panel.url {
             sourcePath = url.path
             refresh()
@@ -131,10 +285,7 @@ final class SortViewModel: ObservableObject {
     func createMissingTarget() {
         guard let year = pendingCreateYear ?? missingYears.first else { return }
         do {
-            let created = try CaptureSorter.createTargetsFolder(
-                year: year,
-                sourceRoot: URL(fileURLWithPath: sourcePath)
-            )
+            let created = try CaptureSorter.createTargetsFolder(year: year, targetsRoot: targetsRoot)
             status = "Created \(created.path). No capture files were moved."
             refresh()
         } catch {
@@ -144,19 +295,75 @@ final class SortViewModel: ObservableObject {
 
     func beginSortFlow() {
         guard canSortOrCleanup else { return }
+        if plannedCount == 0, summary.duplicates > 0 {
+            showDuplicateConfirm = true
+            return
+        }
+        if let format = backupFormat {
+            Task { await archiveThenConfirmSort(format) }
+            return
+        }
         showBackupOffer = true
     }
 
+    /// Zip and/or tarball backup of the capture folders into Backup Storage; the sort is only offered once it succeeds.
+    func archiveThenConfirmSort(_ format: BackupFormat) async {
+        guard BackupFormat.systemArchiverAvailable else {
+            backupFailed = true
+            status = "This Mac's built-in archiver (/usr/bin/tar) is missing — nothing was moved. Use one of the free archivers below, or turn the backup off."
+            return
+        }
+        if libraryFolders[.backup] == nil {
+            chooseLibraryFolder(.backup)
+        }
+        guard let destination = libraryFolders[.backup] else {
+            status = "No Backup Storage location — nothing was moved."
+            return
+        }
+        let names = Array(Set(entries.map(\.captureFolder)))
+        let source = URL(fileURLWithPath: sourcePath)
+        isBusy = true
+        status = "Creating \(format.label) backup in \(destination.path)…"
+        defer { isBusy = false }
+        do {
+            let archive = try await Task.detached(priority: .userInitiated) {
+                try CaptureSorter.archiveCaptureFolders(names: names, sourceRoot: source, destinationParent: destination, format: format)
+            }.value
+            backupFailed = false
+            status = archive.map { "Backup complete: \($0.lastPathComponent) in \(destination.path)" } ?? "No capture folders to back up."
+            showSortConfirm = true
+        } catch {
+            backupFailed = true
+            status = "Backup failed — nothing was moved. \(error.localizedDescription)"
+        }
+    }
+
+    /// Asks about duplicates once the dialog that triggered this has closed; SwiftUI shows one at a time.
+    private func askAboutDuplicatesLater() {
+        guard summary.duplicates > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.showDuplicateConfirm = true
+        }
+    }
+
+    func deleteDuplicates() {
+        isBusy = true
+        defer { isBusy = false }
+        let result = CaptureSorter.deleteDuplicates(duplicateItems, sourceRoot: URL(fileURLWithPath: sourcePath))
+        refresh()
+        status = "Deleted \(result.deleted) duplicate(s) from Captures and removed \(result.removedFolders) emptied capture folder(s)."
+            + (result.skipped > 0 ? " \(result.skipped) skipped because they changed since the preview." : "")
+    }
+
+    func keepDuplicates() {
+        status = "Kept \(summary.duplicates) duplicate(s) in Captures. They stay marked Duplicate, and their capture folders stay until they are deleted."
+    }
+
     func chooseBackupLocationAndRun() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = true
-        panel.prompt = "Choose Backup Folder"
-        panel.message = "Choose where to copy the capture folders before sorting."
-        panel.directoryURL = URL(fileURLWithPath: sourcePath).deletingLastPathComponent()
-        guard panel.runModal() == .OK, let url = panel.url else {
+        if libraryFolders[.backup] == nil {
+            chooseLibraryFolder(.backup)
+        }
+        guard let url = libraryFolders[.backup] else {
             status = "Backup cancelled — nothing was moved."
             return
         }
@@ -181,10 +388,13 @@ final class SortViewModel: ObservableObject {
         do {
             let result = try CaptureSorter.performSort(
                 entries: entries,
-                sourceRoot: URL(fileURLWithPath: sourcePath)
+                sourceRoot: URL(fileURLWithPath: sourcePath),
+                targetsRoot: targetsRoot
             )
-            status = "Sort complete: \(result.move) moved, \(result.replace) replaced, \(result.keep) source duplicates cleared, \(result.removedFolders) capture folders removed."
             refresh()
+            status = "Sort complete: \(result.move) moved, \(result.replace) replaced, \(result.removedFolders) capture folders removed."
+                + (summary.duplicates > 0 ? " \(summary.duplicates) duplicate(s) left in Captures." : "")
+            askAboutDuplicatesLater()
         } catch {
             status = error.localizedDescription
         }
@@ -214,7 +424,10 @@ struct ContentView: View {
         }
         .background(Color(red: 0.02, green: 0.04, blue: 0.08))
         .foregroundStyle(Color(red: 0.92, green: 0.94, blue: 1.0))
-        .onAppear { model.refresh() }
+        .onAppear {
+            model.refresh()
+            model.askLibraryFoldersIfNeeded()
+        }
         .confirmationDialog(
             "Create Targets folder?",
             isPresented: $model.showCreateConfirm,
@@ -254,29 +467,39 @@ struct ContentView: View {
         } message: {
             if model.actionableCount == 0 {
                 Text("No TIFF/FITS left to move. Delete \(model.spentCaptureNames.count) emptied capture folder(s) at the Captures root?")
-            } else if model.plannedCount == 0, model.summary.keep > 0 {
-                Text("All \(model.summary.keep) files already exist in Targets (same or newer). Sort will remove the source duplicates and delete emptied capture folders.")
             } else {
-                Text("Move \(model.summary.move) new files, replace \(model.summary.replace) older destination files, and clear \(model.summary.keep) source duplicates. Emptied capture folders will be deleted.")
+                Text("Move \(model.summary.move) new files and replace \(model.summary.replace) older Targets files. Emptied capture folders will be deleted."
+                     + (model.summary.duplicates > 0 ? " \(model.summary.duplicates) duplicate(s) already in Targets are left alone; you'll be asked about them next." : ""))
             }
         }
+        .alert("Delete duplicates?", isPresented: $model.showDuplicateConfirm) {
+            Button("Yes", role: .destructive) { model.deleteDuplicates() }
+            Button("No", role: .cancel) { model.keepDuplicates() }
+        } message: {
+            Text(model.duplicatePrompt)
+        }
         .sheet(isPresented: $model.showPlanSheet) {
-            PlanReviewSheet(items: model.planItems, summary: model.summary, telescope: model.telescopeKind.menuTitle)
+            PlanReviewSheet(model: model)
         }
     }
 
     private struct PlanReviewSheet: View {
-        let items: [SortPlanItem]
-        let summary: SortSummary
-        let telescope: String
+        @ObservedObject var model: SortViewModel
         @Environment(\.dismiss) private var dismiss
+        @State private var confirmDelete = false
+
+        private var groups: [(folder: String, items: [SortPlanItem])] {
+            Dictionary(grouping: model.planItems, by: \.captureFolder)
+                .map { (folder: $0.key, items: $0.value) }
+                .sorted { $0.folder < $1.folder }
+        }
 
         var body: some View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("File plan").font(.title2.bold())
-                        Text(telescope)
+                        Text(model.telescopeKind.menuTitle)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -284,37 +507,114 @@ struct ContentView: View {
                     Button("Done") { dismiss() }
                         .keyboardShortcut(.defaultAction)
                 }
-                Text("\(summary.move) move · \(summary.replace) replace · \(summary.keep) keep  —  \(items.count) files. Nothing has been moved yet.")
+                Text("\(groups.count) capture folder(s) · \(model.planItems.count) files: \(model.summary.move) new · \(model.summary.replace) newer · \(model.summary.duplicates) duplicate. Nothing has been moved yet.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
-                if items.isEmpty {
-                    Text("No TIFF/FITS actions in this preview. Check telescope type and Source Captures path.")
+                if model.planItems.isEmpty {
+                    Text("No TIFF/FITS actions in this preview. Check the Source Captures path and file types.")
                         .padding(.top, 24)
                     Spacer()
                 } else {
-                    Table(items) {
-                        TableColumn("Action") { (item: SortPlanItem) in
-                            Text(item.action.rawValue.uppercased())
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        }
-                        .width(70)
-                        TableColumn("From") { (item: SortPlanItem) in
-                            Text(item.source.path)
-                                .font(.system(size: 10, design: .monospaced))
-                                .lineLimit(2)
-                        }
-                        TableColumn("To") { (item: SortPlanItem) in
-                            Text(item.destination.path)
-                                .font(.system(size: 10, design: .monospaced))
-                                .lineLimit(2)
+                    PlanRow.header
+                    List {
+                        ForEach(groups, id: \.folder) { group in
+                            Section {
+                                ForEach(group.items) { PlanRow(item: $0, processing: model.processingFolder(for: $0.object)) }
+                            } header: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "folder.fill")
+                                    Text(group.folder).font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                    Spacer()
+                                    Text(SortViewModel.statusText(group.items)).font(.system(size: 11))
+                                }
+                            }
                         }
                     }
+                    .listStyle(.inset(alternatesRowBackgrounds: true))
                     .frame(minHeight: 360)
+                }
+
+                if model.summary.duplicates > 0 {
+                    HStack {
+                        Image(systemName: "doc.on.doc").foregroundStyle(.orange)
+                        Text("\(model.summary.duplicates) file(s) are already in Targets and are marked Duplicate or Older copy. Sort leaves them in place.")
+                            .font(.callout)
+                        Spacer()
+                        Button("Delete duplicates…") { confirmDelete = true }
+                            .disabled(model.isBusy)
+                    }
                 }
             }
             .padding(20)
-            .frame(minWidth: 720, minHeight: 480)
+            .frame(minWidth: 1020, minHeight: 520)
+            .alert("Delete duplicates?", isPresented: $confirmDelete) {
+                Button("Yes", role: .destructive) { model.deleteDuplicates() }
+                Button("No", role: .cancel) { model.keepDuplicates() }
+            } message: {
+                Text(model.duplicatePrompt)
+            }
+        }
+    }
+
+    private struct PlanRow: View {
+        let item: SortPlanItem
+        let processing: URL?
+
+        private static let dateFormat: DateFormatter = {
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd HH:mm"
+            return f
+        }()
+
+        static var header: some View {
+            HStack(spacing: 10) {
+                Text("DSO / name").frame(width: 130, alignment: .leading)
+                Text("Image file").frame(minWidth: 170, maxWidth: .infinity, alignment: .leading)
+                Text("Date").frame(width: 120, alignment: .leading)
+                Text("Target folder").frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+                Text("Processing").frame(width: 120, alignment: .leading)
+                Text("Status").frame(width: 100, alignment: .leading)
+            }
+            .font(.system(size: 10, weight: .heavy))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+        }
+
+        var body: some View {
+            HStack(spacing: 10) {
+                Text(item.object).fontWeight(.semibold).frame(width: 130, alignment: .leading)
+                Text(item.source.lastPathComponent)
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(minWidth: 170, maxWidth: .infinity, alignment: .leading)
+                    .help(item.source.path)
+                Text(Self.dateFormat.string(from: item.date))
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(width: 120, alignment: .leading)
+                Text(item.targetFolder)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+                    .help(item.destination.path)
+                Text(processing.map { "✓ \($0.lastPathComponent)" } ?? "—")
+                    .font(.system(size: 11))
+                    .foregroundStyle(processing == nil ? Color.secondary : Color.green)
+                    .frame(width: 120, alignment: .leading)
+                    .help(processing?.path ?? "No folder for this object in Processing Targets yet")
+                Text(item.action.label)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(color)
+                    .frame(width: 100, alignment: .leading)
+            }
+            .lineLimit(1)
+        }
+
+        private var color: Color {
+            switch item.action {
+            case .move: return .green
+            case .replace: return .blue
+            case .duplicate: return .orange
+            case .older: return .gray
+            }
         }
     }
 
@@ -341,47 +641,6 @@ struct ContentView: View {
             }
             .padding(.bottom, 8)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("TELESCOPE TYPE")
-                    .font(.system(size: 9, weight: .heavy))
-                    .tracking(1.1)
-                    .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
-                if model.lockedKind == nil {
-                    Picker("Telescope", selection: $model.telescopeKind) {
-                        ForEach(TelescopeKind.allCases) { kind in
-                            Text(kind.menuTitle).tag(kind)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                } else {
-                    Text(model.telescopeKind.layoutTitle)
-                        .font(.system(size: 13, weight: .semibold))
-                    Text(model.telescopeKind.compatibilityNote)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color(red: 0.78, green: 0.84, blue: 0.94))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if model.lockedKind == nil {
-                    Text(model.telescopeKind.compatibilityNote)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color(red: 0.78, green: 0.84, blue: 0.94))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(TelescopeKind.notAffiliated)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.78, green: 0.84, blue: 0.94))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text(model.telescopeKind.dropHint)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(red: 0.72, green: 0.78, blue: 0.90))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(red: 0.12, green: 0.20, blue: 0.36).opacity(0.75))
-            )
-
             VStack(alignment: .leading, spacing: 10) {
                 Text("HOW IT WORKS")
                     .font(.system(size: 9, weight: .heavy))
@@ -391,6 +650,7 @@ struct ContentView: View {
                     infoLine(icon: line.icon, text: line.text)
                 }
                 infoLine(icon: "externaldrive", text: "Optional backup copies capture folders before anything moves.")
+                infoLine(icon: "doc.on.doc", text: "Files already in Targets are marked Duplicate. You're asked Yes/No before they're deleted.")
                 infoLine(icon: "trash", text: "When a capture has no TIFF/FITS left, that folder is deleted at the Captures root.")
             }
             .padding(12)
@@ -455,9 +715,10 @@ struct ContentView: View {
                         .tracking(1.2)
                         .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
                     Text("Ready to review").font(.system(size: 24, weight: .bold))
-                    Text(model.telescopeKind.menuTitle)
+                    Text(model.telescopeKind.menuTitle + (model.layoutDetected ? " · detected" : ""))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
+                        .help(model.telescopeKind.compatibilityNote)
                 }
                 Spacer()
                 HStack(spacing: 8) {
@@ -487,34 +748,104 @@ struct ContentView: View {
             }
             .padding(.vertical, 8)
 
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("DESTINATION").font(.system(size: 9, weight: .heavy))
-                        .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
-                    Text("Choose a year and month").font(.system(size: 16, weight: .semibold))
-                    Text("Objects decode into Targets {year}/{DSO} for the selected telescope type.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
-                }
-                Spacer()
-                Picker("Year", selection: $model.selectedYear) {
-                    Text("All years").tag("all")
-                    ForEach(model.years, id: \.self) { Text($0).tag($0) }
-                }
-                .frame(width: 120)
-                .onChange(of: model.selectedYear) { _, _ in model.refresh() }
-
-                Picker("Month", selection: $model.selectedMonth) {
-                    ForEach(model.months, id: \.id) { Text($0.title).tag($0.id) }
-                }
-                .frame(width: 140)
-                .onChange(of: model.selectedMonth) { _, _ in model.refresh() }
-
-                Button("Refresh preview") { model.refresh() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.30, green: 0.48, blue: 0.95))
+            ForEach(LibraryFolder.allCases, id: \.self) { folder in
+                libraryRow(folder)
             }
-            .padding(16)
+
+            VStack(spacing: 0) {
+                HStack(alignment: .bottom, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("DESTINATION").font(.system(size: 9, weight: .heavy))
+                            .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
+                        Text("Choose a year and month").font(.system(size: 16, weight: .semibold))
+                        Text("Objects decode into Targets {year}/{DSO} for the detected capture layout.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
+                    }
+                    Spacer()
+                    Picker("Year", selection: $model.selectedYear) {
+                        Text("All years").tag("all")
+                        ForEach(model.years, id: \.self) { Text($0).tag($0) }
+                    }
+                    .frame(width: 120)
+                    .onChange(of: model.selectedYear) { _, _ in model.refresh() }
+
+                    Picker("Month", selection: $model.selectedMonth) {
+                        ForEach(model.months, id: \.id) { Text($0.title).tag($0.id) }
+                    }
+                    .frame(width: 140)
+                    .onChange(of: model.selectedMonth) { _, _ in model.refresh() }
+
+                    Button("Refresh preview") { model.refresh() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color(red: 0.30, green: 0.48, blue: 0.95))
+                }
+                .padding([.horizontal, .top], 16)
+                .padding(.bottom, 8)
+
+                HStack(spacing: 16) {
+                    Text("FILES TO MOVE").font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
+                        .frame(width: 86, alignment: .leading)
+                    ForEach(SortFileType.allCases) { type in
+                        Toggle(type.label, isOn: Binding(
+                            get: { model.fileTypes.contains(type) },
+                            set: { on in
+                                if on { model.fileTypes.insert(type) } else { model.fileTypes.remove(type) }
+                            }
+                        ))
+                    }
+                Toggle("All", isOn: Binding(
+                    get: { model.fileTypes.count == SortFileType.allCases.count },
+                    set: { on in model.fileTypes = on ? Set(SortFileType.allCases) : [] }
+                ))
+                Spacer()
+            }
+            .toggleStyle(.checkbox)
+            .font(.system(size: 12))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+
+            HStack(spacing: 16) {
+                Text("BACKUP").font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
+                    .frame(width: 86, alignment: .leading)
+                Picker("Backup", selection: Binding(
+                    get: { model.backupFormat?.rawValue ?? "off" },
+                    set: { model.backupFormat = BackupFormat(rawValue: $0) }
+                )) {
+                    Text("Off").tag("off")
+                    ForEach(BackupFormat.allCases) { Text("\($0.label) (.\($0.fileExtension))").tag($0.rawValue) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(width: 150)
+                .help("Zip (.zip) or tarball (.tar.gz) of the capture folders before sorting. Built into macOS — nothing to install.")
+                Text(model.backupFormat == nil
+                     ? "Sort offers a folder copy instead"
+                     : "→ \(model.libraryFolders[.backup]?.path ?? "Backup Storage (asked when you sort)")")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+            }
+            .font(.system(size: 12))
+            .padding(.horizontal, 16)
+            .padding(.bottom, model.showArchiverLinks ? 6 : 16)
+
+            if model.showArchiverLinks {
+                HStack(spacing: 14) {
+                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    Text("Free Mac zip & tarball apps:").font(.system(size: 11))
+                    ForEach(ArchiverLinks.all, id: \.title) { link in
+                        Link(link.title, destination: link.url).font(.system(size: 11, weight: .semibold))
+                    }
+                    Spacer()
+                }
+                .padding([.horizontal, .bottom], 16)
+            }
+            }
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color(red: 0.09, green: 0.15, blue: 0.28).opacity(0.8))
@@ -582,6 +913,14 @@ struct ContentView: View {
                 .width(120)
                 TableColumn("Img folders") { Text("\($0.imageFolders)").foregroundStyle(tableInk) }.width(70)
                 TableColumn("Files") { Text("\($0.files)").foregroundStyle(tableInk) }.width(50)
+                TableColumn("Status") { (entry: CaptureEntry) in
+                    let text = model.entryStatus[entry.id] ?? ""
+                    Text(text)
+                        .fontWeight(text.contains("uplicate") ? .semibold : .regular)
+                        .foregroundStyle(text.hasPrefix("Duplicate") || text.hasSuffix("duplicates") ? Color.orange : tableInk)
+                        .help(text.contains("uplicate") ? "Already in Targets. You'll be asked before these are deleted." : "")
+                }
+                .width(min: 90, ideal: 130)
                 TableColumn("Formats") {
                     Text($0.formats.joined(separator: ", ")).foregroundStyle(tableInk)
                 }
@@ -602,13 +941,42 @@ struct ContentView: View {
         }
     }
 
+    private func libraryRow(_ folder: LibraryFolder) -> some View {
+        let url = model.libraryFolders[folder]
+        return HStack {
+            Image(systemName: folder == .originals ? "archivebox.fill" : folder == .processing ? "slider.horizontal.3" : "externaldrive.fill")
+                .foregroundStyle(Color(red: 0.45, green: 0.62, blue: 1.0))
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(folder.title.uppercased())
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
+                Text(url?.path ?? (folder == .originals ? "Not set — Targets {year} stay inside Source Captures" : "Not set"))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(url == nil ? Color(red: 0.90, green: 0.70, blue: 0.35) : Color(red: 0.92, green: 0.94, blue: 1.0))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            if url != nil {
+                Text(model.savedDefaults.contains(folder) ? "Default" : "This session")
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+            }
+            Button("Change…") { model.chooseLibraryFolder(folder) }
+                .buttonStyle(.bordered)
+        }
+    }
+
     private var tableInk: Color { Color(red: 0.08, green: 0.12, blue: 0.22) }
     private var tableDestination: Color { Color(red: 0.10, green: 0.28, blue: 0.62) }
 
     private var stats: some View {
         HStack(spacing: 18) {
             stat(value: "\(model.entries.count)", label: "folders ready to inspect")
-            stat(value: "\(model.entries.reduce(0) { $0 + $1.files })", label: "TIFF / FITS capture files")
+            stat(value: "\(model.entries.reduce(0) { $0 + $1.files })", label: "image files to sort")
             HStack(spacing: 10) {
                 Image(systemName: "arrow.left.arrow.right")
                     .foregroundStyle(Color(red: 0.59, green: 0.68, blue: 1.0))
@@ -640,12 +1008,13 @@ struct ContentView: View {
                 Text("\(model.spentCaptureNames.count) emptied capture folder(s) ready to delete at the Captures root.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.68, green: 0.74, blue: 0.88))
-            } else if model.plannedCount == 0, model.summary.keep > 0 {
-                Text("\(model.summary.keep) already in Targets — Sort clears source duplicates and removes emptied capture folders.")
+            } else if model.plannedCount == 0, model.summary.duplicates > 0 {
+                Text("All \(model.summary.duplicates) file(s) are duplicates already in Targets. Delete duplicates asks before removing anything.")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(red: 0.68, green: 0.74, blue: 0.88))
+                    .foregroundStyle(Color(red: 0.95, green: 0.72, blue: 0.40))
             } else {
-                Text("\(model.plannedCount) files eligible: \(model.summary.move) new moves, \(model.summary.replace) newer replacements, \(model.summary.keep) source duplicates to clear.")
+                Text("\(model.plannedCount) files eligible: \(model.summary.move) new moves, \(model.summary.replace) newer replacements."
+                     + (model.summary.duplicates > 0 ? " \(model.summary.duplicates) duplicate(s) already in Targets." : ""))
                     .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.68, green: 0.74, blue: 0.88))
             }
@@ -654,7 +1023,8 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(Color(red: 0.30, green: 0.48, blue: 0.95))
                 .disabled(model.isBusy || (model.planItems.isEmpty && model.entries.isEmpty))
-            Button(model.actionableCount == 0 && !model.spentCaptureNames.isEmpty ? "Remove empty captures" : "Sort eligible files") {
+            Button(model.actionableCount == 0 && !model.spentCaptureNames.isEmpty ? "Remove empty captures"
+                   : model.plannedCount == 0 && model.summary.duplicates > 0 ? "Delete duplicates…" : "Sort eligible files") {
                 model.beginSortFlow()
             }
             .buttonStyle(.borderedProminent)

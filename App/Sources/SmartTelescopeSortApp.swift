@@ -33,6 +33,11 @@ struct SmartTelescopeSortApp: App {
                 Button("Smart Telescope Planner") {
                     NSWorkspace.shared.open(BigSkyAstroWebLinks.telescopePlanner)
                 }
+                Menu("Free Zip & Tarball Apps") {
+                    ForEach(ArchiverLinks.all, id: \.title) { link in
+                        Button(link.title) { NSWorkspace.shared.open(link.url) }
+                    }
+                }
                 Button("Contact Support") {
                     NSWorkspace.shared.open(BigSkyAstroWebLinks.supportEmail)
                 }

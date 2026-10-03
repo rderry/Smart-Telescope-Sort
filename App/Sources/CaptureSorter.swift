@@ -19,17 +19,112 @@ struct SortPlanItem: Identifiable {
     var source: URL
     var destination: URL
     var action: Action
+    var entryID: String
+    var captureFolder: String
+    var object: String
+    var targetFolder: String
+    var date: Date
 
     enum Action: String {
-        case move, replace, keep
+        /// New to Targets.
+        case move
+        /// Newer than the copy in Targets.
+        case replace
+        /// Same name and size as the copy already in Targets.
+        case duplicate
+        /// Already in Targets as a different, newer file.
+        case older
+
+        var label: String {
+            switch self {
+            case .move: return "New"
+            case .replace: return "Replaces older"
+            case .duplicate: return "Duplicate"
+            case .older: return "Older copy"
+            }
+        }
     }
+
+    /// Already in Targets; never moved, only deleted when the user says yes.
+    var isDuplicate: Bool { action == .duplicate || action == .older }
 }
 
 struct SortSummary {
     var move = 0
     var replace = 0
-    var keep = 0
+    var duplicate = 0
+    var older = 0
     var createTargets: [String] = []
+    var removedFolders = 0
+
+    var duplicates: Int { duplicate + older }
+}
+
+/// Image types the user can choose to sort.
+enum SortFileType: String, CaseIterable, Identifiable {
+    case tiff, jpeg, fits
+
+    static let defaults: [SortFileType] = [.tiff, .fits]
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .tiff: return "TIFF"
+        case .jpeg: return "JPG / JPEG"
+        case .fits: return "FITS / FIT"
+        }
+    }
+
+    var extensions: Set<String> {
+        switch self {
+        case .tiff: return ["tif", "tiff"]
+        case .jpeg: return ["jpg", "jpeg"]
+        case .fits: return ["fit", "fits"]
+        }
+    }
+}
+
+/// Archive formats for the backup made before a sort.
+enum BackupFormat: String, CaseIterable, Identifiable {
+    case zip, tarball
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .zip: return "Zip"
+        case .tarball: return "Tarball"
+        }
+    }
+
+    var fileExtension: String {
+        switch self {
+        case .zip: return "zip"
+        case .tarball: return "tar.gz"
+        }
+    }
+
+    /// The archiver that ships with macOS (libarchive's bsdtar on the sealed system volume); nothing to install.
+    static let systemArchiver = URL(fileURLWithPath: "/usr/bin/tar")
+
+    static var systemArchiverAvailable: Bool {
+        FileManager.default.isExecutableFile(atPath: systemArchiver.path)
+    }
+}
+
+/// Free Mac apps that build zip and tarball archives, offered if the built-in archiver can't be used.
+enum ArchiverLinks {
+    static let all: [(title: String, url: URL)] = [
+        ("Keka (free zip & tarball)", URL(string: "https://www.keka.io/en/")!),
+        ("PeaZip (free, open source)", URL(string: "https://peazip.github.io/peazip-macos.html")!),
+        ("Finder Compress (built-in zip)", URL(string: "https://support.apple.com/guide/mac-help/zip-and-unzip-files-and-folders-on-mac-mchlp2528/mac")!),
+    ]
+}
+
+struct DuplicateCleanup {
+    var deleted = 0
+    var skipped = 0
     var removedFolders = 0
 }
 
@@ -41,7 +136,10 @@ struct BackupSummary {
 
 enum CaptureSorter {
     static let defaultSource = URL(fileURLWithPath: "/Volumes/Astronomy/Captures")
-    private static let imageExtensions: Set<String> = ["tif", "tiff", "fit", "fits"]
+    /// Extensions the next scan sorts; set from the file-type checkboxes.
+    static var sortExtensions: Set<String> = SortFileType.defaults.reduce(into: []) { $0.formUnion($1.extensions) }
+    /// Any of these left in a capture folder keeps it from being deleted, whether or not its type is being sorted.
+    private static let keepFolderExtensions: Set<String> = ["tif", "tiff", "fit", "fits", "jpg", "jpeg", "png"]
 
     // Vaonis / Singularity
     private static let datedCapture = try! NSRegularExpression(pattern: #"^(\d{4})-(\d{2})-"#)
@@ -74,14 +172,16 @@ enum CaptureSorter {
     static func scan(
         kind: TelescopeKind,
         sourceRoot: URL = defaultSource,
+        targetsRoot: URL? = nil,
         year: String? = nil,
         month: String? = nil
     ) throws -> (entries: [CaptureEntry], years: [String], excluded: String) {
+        let targets = targetsRoot ?? sourceRoot
         switch kind {
         case .vaonis:
-            return try scanVaonis(sourceRoot: sourceRoot, year: year, month: month)
+            return try scanVaonis(sourceRoot: sourceRoot, targetsRoot: targets, year: year, month: month)
         case .seestar, .dwarf, .origin:
-            return try scanGenericSessions(kind: kind, sourceRoot: sourceRoot, year: year, month: month)
+            return try scanGenericSessions(kind: kind, sourceRoot: sourceRoot, targetsRoot: targets, year: year, month: month)
         }
     }
 
@@ -89,6 +189,7 @@ enum CaptureSorter {
 
     private static func scanVaonis(
         sourceRoot: URL,
+        targetsRoot: URL,
         year: String?,
         month: String?
     ) throws -> (entries: [CaptureEntry], years: [String], excluded: String) {
@@ -128,7 +229,7 @@ enum CaptureSorter {
                 byObject[objectName] = (prior.folders + folderCount, prior.files + files)
             }
 
-            let targetRoot = sourceRoot.appendingPathComponent("Targets \(captureYear)", isDirectory: true)
+            let targetRoot = targetsRoot.appendingPathComponent("Targets \(captureYear)", isDirectory: true)
             var targetIsDir: ObjCBool = false
             let targetExists = fm.fileExists(atPath: targetRoot.path, isDirectory: &targetIsDir) && targetIsDir.boolValue
 
@@ -164,6 +265,7 @@ enum CaptureSorter {
     private static func scanGenericSessions(
         kind: TelescopeKind,
         sourceRoot: URL,
+        targetsRoot: URL,
         year: String?,
         month: String?
     ) throws -> (entries: [CaptureEntry], years: [String], excluded: String) {
@@ -197,7 +299,7 @@ enum CaptureSorter {
 
                 let uniqueFiles = dedupeFiles(group.files)
 
-                let targetRoot = sourceRoot.appendingPathComponent("Targets \(y)", isDirectory: true)
+                let targetRoot = targetsRoot.appendingPathComponent("Targets \(y)", isDirectory: true)
                 var targetIsDir: ObjCBool = false
                 let targetExists = fm.fileExists(atPath: targetRoot.path, isDirectory: &targetIsDir) && targetIsDir.boolValue
 
@@ -303,7 +405,7 @@ enum CaptureSorter {
                 // Skip Seestar UI noise folders if present
                 if lower == "thumbnail" || lower == "thumbnails" || lower.hasSuffix("_thumbnail") { continue }
                 subDirs.append(kid)
-            } else if imageExtensions.contains(kid.pathExtension.lowercased()) {
+            } else if sortExtensions.contains(kid.pathExtension.lowercased()) {
                 loose.append(kid)
             }
         }
@@ -427,67 +529,112 @@ enum CaptureSorter {
         var summary = SortSummary()
         summary.createTargets = Array(Set(entries.filter { !$0.targetExists }.map(\.year))).sorted()
 
-        var bestByDestination: [String: (source: URL, destination: URL)] = [:]
+        var bestByDestination: [String: (source: URL, destination: URL, entry: CaptureEntry)] = [:]
         for entry in entries {
             for source in entry.sourceFiles {
                 let destination = entry.targetDirectory.appendingPathComponent(source.lastPathComponent)
                 let key = destination.standardizedFileURL.path
                 if let existing = bestByDestination[key] {
-                    let existingDate = (try? existing.source.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                    let sourceDate = (try? source.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                    if sourceDate > existingDate {
-                        bestByDestination[key] = (source, destination)
+                    if modified(source) > modified(existing.source) {
+                        bestByDestination[key] = (source, destination, entry)
                     }
                 } else {
-                    bestByDestination[key] = (source, destination)
+                    bestByDestination[key] = (source, destination, entry)
                 }
             }
         }
 
         for item in bestByDestination.values.sorted(by: { $0.destination.path < $1.destination.path }) {
-            let action: SortPlanItem.Action
-            if FileManager.default.fileExists(atPath: item.destination.path) {
-                let sourceDate = (try? item.source.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                let destDate = (try? item.destination.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                action = sourceDate > destDate ? .replace : .keep
-            } else {
-                action = .move
-            }
+            let action = classify(source: item.source, destination: item.destination)
             switch action {
             case .move: summary.move += 1
             case .replace: summary.replace += 1
-            case .keep: summary.keep += 1
+            case .duplicate: summary.duplicate += 1
+            case .older: summary.older += 1
             }
-            plans.append(SortPlanItem(source: item.source, destination: item.destination, action: action))
+            plans.append(SortPlanItem(
+                source: item.source,
+                destination: item.destination,
+                action: action,
+                entryID: item.entry.id,
+                captureFolder: item.entry.captureFolder,
+                object: item.entry.object,
+                targetFolder: "Targets \(item.entry.year)/\(item.entry.object)",
+                date: modified(item.source)
+            ))
+        }
+        plans.sort {
+            ($0.captureFolder, $0.object, $0.source.lastPathComponent) < ($1.captureFolder, $1.object, $1.source.lastPathComponent)
         }
         return (plans, summary)
     }
 
+    private static func classify(source: URL, destination: URL) -> SortPlanItem.Action {
+        guard FileManager.default.fileExists(atPath: destination.path) else { return .move }
+        if modified(source) > modified(destination) { return .replace }
+        return size(source) == size(destination) ? .duplicate : .older
+    }
+
+    private static func modified(_ url: URL) -> Date {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
+
+    private static func size(_ url: URL) -> Int {
+        (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1
+    }
+
+    /// Deletes source files that are already in Targets (moved to the Trash when the volume allows it), then
+    /// removes capture folders left with no TIFF/FITS. Each file is re-checked against its Targets copy first.
+    static func deleteDuplicates(_ items: [SortPlanItem], sourceRoot: URL) -> DuplicateCleanup {
+        let fm = FileManager.default
+        var result = DuplicateCleanup()
+        for item in items where item.isDuplicate {
+            guard fm.fileExists(atPath: item.source.path),
+                  fm.fileExists(atPath: item.destination.path),
+                  classify(source: item.source, destination: item.destination) == item.action else {
+                result.skipped += 1
+                continue
+            }
+            do {
+                do {
+                    try fm.trashItem(at: item.source, resultingItemURL: nil)
+                } catch {
+                    try fm.removeItem(at: item.source)
+                }
+                result.deleted += 1
+            } catch {
+                result.skipped += 1
+            }
+        }
+        result.removedFolders = removeSpentCaptureFolders(
+            captureNames: Array(Set(items.filter(\.isDuplicate).map(\.captureFolder))),
+            sourceRoot: sourceRoot.standardizedFileURL
+        )
+        return result
+    }
+
     @discardableResult
-    static func createTargetsFolder(year: String, sourceRoot: URL = defaultSource) throws -> URL {
+    static func createTargetsFolder(year: String, targetsRoot: URL = defaultSource) throws -> URL {
         guard year.range(of: #"^\d{4}$"#, options: .regularExpression) != nil else {
             throw NSError(domain: "SmartTelescopeSort", code: 1, userInfo: [NSLocalizedDescriptionKey: "A target year must be four digits."])
         }
-        let target = sourceRoot.appendingPathComponent("Targets \(year)", isDirectory: true)
+        let target = targetsRoot.appendingPathComponent("Targets \(year)", isDirectory: true)
         try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
         return target
     }
 
-    static func performSort(entries: [CaptureEntry], sourceRoot: URL = defaultSource) throws -> SortSummary {
+    static func performSort(entries: [CaptureEntry], sourceRoot: URL = defaultSource, targetsRoot: URL? = nil) throws -> SortSummary {
         let (plans, summary) = preview(entries: entries)
         for year in summary.createTargets {
-            try createTargetsFolder(year: year, sourceRoot: sourceRoot)
+            try createTargetsFolder(year: year, targetsRoot: targetsRoot ?? sourceRoot)
         }
-        var result = SortSummary(createTargets: summary.createTargets)
+        var result = SortSummary(duplicate: summary.duplicate, older: summary.older, createTargets: summary.createTargets)
         let fm = FileManager.default
-        for item in plans {
+        for item in plans where !item.isDuplicate {
             try fm.createDirectory(at: item.destination.deletingLastPathComponent(), withIntermediateDirectories: true)
             switch item.action {
-            case .keep:
-                if fm.fileExists(atPath: item.source.path) {
-                    try fm.removeItem(at: item.source)
-                }
-                result.keep += 1
+            case .duplicate, .older:
+                continue
             case .replace:
                 _ = try fm.replaceItemAt(item.destination, withItemAt: item.source)
                 result.replace += 1
@@ -511,6 +658,7 @@ enum CaptureSorter {
         let fm = FileManager.default
         let stamp = ISO8601DateFormatter()
         stamp.formatOptions = [.withFullDate, .withTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
+        stamp.timeZone = .current
         let folderName = "SmartTelescopeSort-Backup-\(stamp.string(from: Date()).replacingOccurrences(of: ":", with: "-"))"
         let destination = destinationParent.appendingPathComponent(folderName, isDirectory: true)
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -529,9 +677,57 @@ enum CaptureSorter {
             }
             try fm.copyItem(at: source, to: target)
             folders += 1
-            files += imageFiles(under: target).count
+            files += imageFiles(under: target, extensions: keepFolderExtensions).count
         }
         return BackupSummary(folders: folders, files: files, destination: destination)
+    }
+
+    /// Writes a zip or tarball holding the named capture folders with the archiver built into macOS.
+    /// Returns the archive, or nil when there was nothing to back up.
+    static func archiveCaptureFolders(
+        names: [String],
+        sourceRoot: URL,
+        destinationParent: URL,
+        format: BackupFormat
+    ) throws -> URL? {
+        let fm = FileManager.default
+        let folders = Array(Set(names)).sorted().filter { name in
+            var isDir: ObjCBool = false
+            return !name.lowercased().hasPrefix("targets ")
+                && fm.fileExists(atPath: sourceRoot.appendingPathComponent(name).path, isDirectory: &isDir)
+                && isDir.boolValue
+        }
+        guard !folders.isEmpty else { return nil }
+        let stamp = ISO8601DateFormatter()
+        stamp.formatOptions = [.withFullDate, .withTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
+        stamp.timeZone = .current
+        let base = "SmartTelescopeSort-Backup-\(stamp.string(from: Date()).replacingOccurrences(of: ":", with: "-"))"
+        let archive = destinationParent.appendingPathComponent("\(base).\(format.fileExtension)")
+
+        let tar = Process()
+        tar.executableURL = BackupFormat.systemArchiver
+        tar.arguments = (format == .zip ? ["--format", "zip", "-cf"] : ["-czf"])
+            + [archive.path, "--exclude", "._*", "--exclude", ".DS_Store", "-C", sourceRoot.path]
+            + folders.map { $0.hasPrefix("-") ? "./\($0)" : $0 }
+        tar.environment = ["COPYFILE_DISABLE": "1"]
+        let errors = Pipe()
+        tar.standardError = errors
+        tar.standardOutput = FileHandle.nullDevice
+        try tar.run()
+        let message = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        tar.waitUntilExit()
+        guard tar.terminationStatus == 0 else {
+            try? fm.removeItem(at: archive)
+            throw NSError(domain: "SmartTelescopeSort", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "\(format.label) backup failed: \(message.trimmingCharacters(in: .whitespacesAndNewlines))"
+            ])
+        }
+        return archive
+    }
+
+    /// True while any TIFF, FITS, JPG or PNG is left under the folder, sorted type or not.
+    static func holdsImages(_ folder: URL) -> Bool {
+        !imageFiles(under: folder, extensions: keepFolderExtensions).isEmpty
     }
 
     @discardableResult
@@ -544,7 +740,7 @@ enum CaptureSorter {
             let capture = sourceRoot.appendingPathComponent(name, isDirectory: true)
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: capture.path, isDirectory: &isDir), isDir.boolValue else { continue }
-            if !imageFiles(under: capture).isEmpty { continue }
+            if holdsImages(capture) { continue }
             do {
                 try fm.removeItem(at: capture)
                 removed += 1
@@ -621,7 +817,7 @@ enum CaptureSorter {
         return files
     }
 
-    private static func imageFiles(under folder: URL) -> [URL] {
+    private static func imageFiles(under folder: URL, extensions: Set<String> = sortExtensions) -> [URL] {
         guard let enumerator = FileManager.default.enumerator(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
@@ -629,7 +825,7 @@ enum CaptureSorter {
         ) else { return [] }
         var files: [URL] = []
         for case let url as URL in enumerator {
-            if imageExtensions.contains(url.pathExtension.lowercased()) {
+            if extensions.contains(url.pathExtension.lowercased()) {
                 files.append(url)
             }
         }

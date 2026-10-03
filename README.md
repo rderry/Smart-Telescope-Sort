@@ -1,6 +1,34 @@
+<p align="center">
+  <a href="https://bigskyastro.com"><img src="docs/bigskyastro-banner.jpg" alt="BigSkyAstro" width="820"></a>
+</p>
+
 # Smart Telescope Sort
 
-Free macOS app that copies TIFF and FITS files from a smart-telescope download folder into `Targets {year}/{object}`.
+[![Open Source](https://img.shields.io/badge/open%20source-yes-brightgreen)](LICENSE)
+[![License: MIT with attribution](https://img.shields.io/badge/license-MIT%20with%20attribution-blue)](LICENSE)
+[![macOS 14+](https://img.shields.io/badge/macOS-14%2B-lightgrey)](#build)
+[![BigSkyAstro](https://img.shields.io/badge/by-BigSkyAstro-1f3a68)](https://bigskyastro.com)
+
+Free, open-source macOS app from [BigSkyAstro](https://bigskyastro.com) that moves smart-telescope captures from a download folder into `Targets {year}/{object}`.
+
+## Credit BigSkyAstro
+
+**If you modify and distribute this app, in source or binary form, please give credit to BigSkyAstro and link to our web page: [https://bigskyastro.com](https://bigskyastro.com).**
+
+A credit line such as this is enough:
+
+> Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com
+
+The [LICENSE](LICENSE) makes this credit a condition of redistribution.
+
+## What it does
+
+- Detects the capture layout from your Captures folder: dated session folders, object albums, session folders, or object-and-date folders.
+- Asks once where your Original Targets, Processing Targets and Backup Storage folders live, with an option to save each as the default.
+- Lets you choose which files move: TIFF, JPG/JPEG, FITS/FIT, or all of them.
+- Before sorting, can back up the capture folders as a zip or tarball using the archiver built into macOS. There is nothing extra to install.
+- Lists every file in a review window, with its object, date and target folder, before anything moves.
+- Marks files already in Targets as duplicates and asks Yes or No before sending them to the Trash.
 
 Independent app. Not affiliated with or created by telescope manufacturers. Model names in the source identify folder layouts only. A modified build should keep the product name free of those trademarks.
 
@@ -37,10 +65,8 @@ That script needs `reportlab`.
 | `DWARF/` | Session folders |
 | `Origin/` | Object and date folders |
 
-The app reads `.tif`, `.tiff`, `.fit`, and `.fits`. It leaves JPG and PNG alone.
-
 ## License
 
-MIT, with a requirement to credit BigSkyAstro. See [LICENSE](LICENSE).
+Open source under the MIT License, with an attribution requirement. See [LICENSE](LICENSE).
 
-Copies and modified builds must keep the copyright notice and attribute the original app to BigSkyAstro, for example: “Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com”.
+Copyright (c) 2026 [BigSkyAstro](https://bigskyastro.com).

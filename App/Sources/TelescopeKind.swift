@@ -108,4 +108,36 @@ enum TelescopeKind: String, CaseIterable, Identifiable, Codable {
     }
 
     static let storageKey = "SmartTelescopeSort.telescopeKind"
+
+    /// The layout most capture folders under `root` follow, or nil when none are recognisable.
+    static func detect(in root: URL) -> TelescopeKind? {
+        var votes: [TelescopeKind: Int] = [:]
+        for folder in subfolders(of: root) where !folder.lastPathComponent.lowercased().hasPrefix("targets ") {
+            if let kind = guess(folder) { votes[kind, default: 0] += 1 }
+        }
+        return votes.max { ($0.value, $1.key.rawValue) < ($1.value, $0.key.rawValue) }?.key
+    }
+
+    private static func guess(_ folder: URL) -> TelescopeKind? {
+        let name = folder.lastPathComponent
+        let lower = name.lowercased()
+        if lower.contains("seestar") { return .seestar }
+        if lower.contains("dwarf") { return .dwarf }
+        if matches(name, #"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(observation|plan)[-_]"#) { return .vaonis }
+        let kids = subfolders(of: folder).map(\.lastPathComponent)
+        if kids.contains(where: { matches($0, #"^\d+-(observation|images)"#) }) { return .vaonis }
+        let originPattern = #"^[A-Za-z][^_-]*(?:[_-][A-Za-z][^_-]*)*[_-]\d{4}-\d{2}-\d{2}"#
+        if matches(name, originPattern) || kids.contains(where: { matches($0, originPattern) }) { return .origin }
+        return nil
+    }
+
+    private static func matches(_ text: String, _ pattern: String) -> Bool {
+        text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    private static func subfolders(of url: URL) -> [URL] {
+        let kids = (try? FileManager.default.contentsOfDirectory(
+            at: url, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
+        return kids.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+    }
 }

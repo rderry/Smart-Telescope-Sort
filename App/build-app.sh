@@ -36,6 +36,7 @@ xcrun swiftc \
   -O \
   "$SRC/TelescopeKind.swift" \
   "$SRC/CaptureSorter.swift" \
+  "$SRC/LibraryFolders.swift" \
   "$SRC/ContentView.swift" \
   "$SRC/SmartTelescopeSortApp.swift" \
   -o "$MACOS/SmartTelescopeSort" \
