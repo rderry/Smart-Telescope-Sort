@@ -2,6 +2,8 @@
   <a href="https://bigskyastro.com"><img src="docs/bigskyastro-banner.jpg" alt="BigSkyAstro" width="820"></a>
 </p>
 
+<img src="App/Icons/AppIcon-source.png" alt="Smart Telescope Sort icon" width="128" align="right">
+
 # Smart Telescope Sort
 
 [![Open Source](https://img.shields.io/badge/open%20source-yes-brightgreen)](LICENSE)
@@ -28,7 +30,9 @@ The [LICENSE](LICENSE) makes this credit a condition of redistribution.
 - Lets you choose which files move: TIFF, JPG/JPEG, FITS/FIT, or all of them.
 - Before sorting, can back up the capture folders as a zip or tarball using the archiver built into macOS. There is nothing extra to install.
 - Lists every file in a review window, with its object, date and target folder, before anything moves.
+- Asks you to name each backup and shows its progress, with a Cancel button.
 - Marks files already in Targets as duplicates and asks Yes or No before sending them to the Trash.
+- After a sort, asks Yes or No before trashing a finished capture folder that still holds images you didn't choose to move.
 
 Independent app. Not affiliated with or created by telescope manufacturers. Model names in the source identify folder layouts only. A modified build should keep the product name free of those trademarks.
 

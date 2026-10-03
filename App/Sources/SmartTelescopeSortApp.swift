@@ -10,9 +10,9 @@ struct SmartTelescopeSortApp: App {
     var body: some Scene {
         WindowGroup(windowTitle) {
             ContentView()
-                .frame(minWidth: 1000, minHeight: 640)
+                .frame(minWidth: 1000, minHeight: 760)
         }
-        .defaultSize(width: 1220, height: 780)
+        .defaultSize(width: 1240, height: 880)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .help) {
@@ -32,6 +32,9 @@ struct SmartTelescopeSortApp: App {
                 }
                 Button("Smart Telescope Planner") {
                     NSWorkspace.shared.open(BigSkyAstroWebLinks.telescopePlanner)
+                }
+                Button("Source Code on GitHub (Open Source)") {
+                    NSWorkspace.shared.open(BigSkyAstroWebLinks.sourceCode)
                 }
                 Menu("Free Zip & Tarball Apps") {
                     ForEach(ArchiverLinks.all, id: \.title) { link in
@@ -67,4 +70,6 @@ enum BigSkyAstroWebLinks {
     static let supportEmail = URL(string: "mailto:support@bigskyastro.com")!
     static let observationPlanner = URL(string: "https://apps.apple.com/app/id6764166535")!
     static let telescopePlanner = URL(string: "https://apps.apple.com/app/id6768153445")!
+    static let sourceCode = URL(string: "https://github.com/rderry/Smart-Telescope-Sort")!
+    static let home = URL(string: "https://bigskyastro.com")!
 }

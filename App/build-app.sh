@@ -27,6 +27,7 @@ cp "$ICONS/AppIcon-OS15.icns" "$RESOURCES/AppIcon-OS15.icns" 2>/dev/null || true
 if [[ -f "$RESOURCES_SRC/Smart-Telescope-Sort-User-Manual.pdf" ]]; then
   cp "$RESOURCES_SRC/Smart-Telescope-Sort-User-Manual.pdf" "$RESOURCES/Smart-Telescope-Sort-User-Manual.pdf"
 fi
+cp "$RESOURCES_SRC/BigSkyAstro-logo.png" "$RESOURCES/BigSkyAstro-logo.png" 2>/dev/null || true
 
 echo "Building Smart Telescope Sort.app ($TARGET, icon $ICON_VARIANT)..."
 xcrun swiftc \

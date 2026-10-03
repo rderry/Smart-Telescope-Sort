@@ -55,7 +55,7 @@ enum TelescopeKind: String, CaseIterable, Identifiable, Codable {
 
     var menuTitle: String { layoutTitle }
 
-    /// Short tip shown under the picker — where to park files for this Sort build.
+    /// First How It Works step: how this layout's files get into Captures.
     var dropHint: String {
         switch self {
         case .vaonis:
@@ -66,44 +66,6 @@ enum TelescopeKind: String, CaseIterable, Identifiable, Codable {
             return "Copy session folders into Captures and keep the FITS/TIFF files inside each session."
         case .origin:
             return "Copy raw folders named with the object and date into Captures. Turn on raw-image saving on the telescope first."
-        }
-    }
-
-    var chooseFolderMessage: String {
-        switch self {
-        case .vaonis: return "Choose the Captures folder that holds dated session folders"
-        case .seestar: return "Choose the Captures folder that holds object albums (FIT/FITS)"
-        case .dwarf: return "Choose the Captures folder that holds session folders (FITS/TIFF)"
-        case .origin: return "Choose the Captures folder that holds object-and-date raw folders (FITS)"
-        }
-    }
-
-    var howItWorksLines: [(icon: String, text: String)] {
-        switch self {
-        case .vaonis:
-            return [
-                ("folder", "FTP User/ dated sessions into Captures — not into Targets."),
-                ("photo.on.rectangle", "Photos is for sharing; TIFF for processing, JPG for viewing."),
-                ("arrow.right.doc.on.clipboard", "Sort moves TIFF/FITS into Targets {year}/{DSO}."),
-            ]
-        case .seestar:
-            return [
-                ("cable.connector", "USB (removable drive), Wi‑Fi share, or app FIT export → Captures."),
-                ("square.stack.3d.up", "Keep object folders (M31, NGC…) with FIT/FITS inside."),
-                ("arrow.right.doc.on.clipboard", "Sort merges into Targets {year}/{DSO}. JPG-only Photos exports are skipped."),
-            ]
-        case .dwarf:
-            return [
-                ("cable.connector", "USB mass-storage or FTP (ftp://192.168.88.1) → Captures."),
-                ("folder", "Keep each session folder intact (FITS/TIFF)."),
-                ("arrow.right.doc.on.clipboard", "Sort merges into Targets {year}/{DSO}."),
-            ]
-        case .origin:
-            return [
-                ("externaldrive", "Enable Save Raw Images, then USB stick (FAT32/exFAT) or FTP → Captures."),
-                ("folder", "Keep object-and-date folders with FITS."),
-                ("arrow.right.doc.on.clipboard", "Sort merges into Targets {year}/{DSO}."),
-            ]
         }
     }
 

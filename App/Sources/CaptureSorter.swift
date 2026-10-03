@@ -114,6 +114,43 @@ enum BackupFormat: String, CaseIterable, Identifiable {
 }
 
 /// Free Mac apps that build zip and tarball archives, offered if the built-in archiver can't be used.
+struct ArchiveProgress: Sendable {
+    var bytesDone: Int64 = 0
+    var bytesTotal: Int64 = 0
+    var filesDone = 0
+    var filesTotal = 0
+    var currentFile = ""
+
+    var fraction: Double { bytesTotal > 0 ? min(Double(bytesDone) / Double(bytesTotal), 1) : 0 }
+}
+
+/// Lets the UI stop a running archive; the partial archive is deleted.
+final class ArchiveJob: @unchecked Sendable {
+    struct Cancelled: Error {}
+
+    private let lock = NSLock()
+    private var process: Process?
+    private var cancelled = false
+
+    var isCancelled: Bool { lock.withLock { cancelled } }
+
+    /// False when Cancel was pressed before the archiver started.
+    func attach(_ process: Process) -> Bool {
+        lock.withLock {
+            self.process = process
+            return !cancelled
+        }
+    }
+
+    func cancel() {
+        let running = lock.withLock {
+            cancelled = true
+            return process
+        }
+        if running?.isRunning == true { running?.terminate() }
+    }
+}
+
 enum ArchiverLinks {
     static let all: [(title: String, url: URL)] = [
         ("Keka (free zip & tarball)", URL(string: "https://www.keka.io/en/")!),
@@ -650,17 +687,45 @@ enum CaptureSorter {
         return result
     }
 
-    static func backupCaptureFolders(
-        entries: [CaptureEntry],
-        sourceRoot: URL,
-        destinationParent: URL
-    ) throws -> BackupSummary {
-        let fm = FileManager.default
+    static var defaultBackupName: String {
         let stamp = ISO8601DateFormatter()
         stamp.formatOptions = [.withFullDate, .withTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
         stamp.timeZone = .current
-        let folderName = "SmartTelescopeSort-Backup-\(stamp.string(from: Date()).replacingOccurrences(of: ":", with: "-"))"
-        let destination = destinationParent.appendingPathComponent(folderName, isDirectory: true)
+        return "SmartTelescopeSort-Backup-\(stamp.string(from: Date()).replacingOccurrences(of: ":", with: "-"))"
+    }
+
+    /// A name the user typed, made safe for a file name (no slashes, colons or archive extension); blank gives the default.
+    static func backupBaseName(_ requested: String?) -> String {
+        var name = (requested ?? "")
+            .replacingOccurrences(of: #"[/:\\]"#, with: "-", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        for suffix in [".tar.gz", ".tgz", ".zip"] where name.lowercased().hasSuffix(suffix) {
+            name.removeLast(suffix.count)
+        }
+        name = name.trimmingCharacters(in: CharacterSet(charactersIn: ". ").union(.whitespacesAndNewlines))
+        return name.isEmpty ? defaultBackupName : String(name.prefix(200))
+    }
+
+    /// `base` plus `ext` in `parent`, numbered " 2", " 3"… when that name is taken.
+    static func unusedURL(in parent: URL, base: String, extension ext: String?) -> URL {
+        let suffix = ext.map { ".\($0)" } ?? ""
+        var candidate = parent.appendingPathComponent(base + suffix)
+        var number = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = parent.appendingPathComponent("\(base) \(number)\(suffix)")
+            number += 1
+        }
+        return candidate
+    }
+
+    static func backupCaptureFolders(
+        entries: [CaptureEntry],
+        sourceRoot: URL,
+        destinationParent: URL,
+        name: String? = nil
+    ) throws -> BackupSummary {
+        let fm = FileManager.default
+        let destination = unusedURL(in: destinationParent, base: backupBaseName(name), extension: nil)
         try fm.createDirectory(at: destination, withIntermediateDirectories: true)
 
         var folders = 0
@@ -688,7 +753,10 @@ enum CaptureSorter {
         names: [String],
         sourceRoot: URL,
         destinationParent: URL,
-        format: BackupFormat
+        format: BackupFormat,
+        name: String? = nil,
+        job: ArchiveJob? = nil,
+        progress: (@Sendable (ArchiveProgress) -> Void)? = nil
     ) throws -> URL? {
         let fm = FileManager.default
         let folders = Array(Set(names)).sorted().filter { name in
@@ -698,31 +766,109 @@ enum CaptureSorter {
                 && isDir.boolValue
         }
         guard !folders.isEmpty else { return nil }
-        let stamp = ISO8601DateFormatter()
-        stamp.formatOptions = [.withFullDate, .withTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
-        stamp.timeZone = .current
-        let base = "SmartTelescopeSort-Backup-\(stamp.string(from: Date()).replacingOccurrences(of: ":", with: "-"))"
-        let archive = destinationParent.appendingPathComponent("\(base).\(format.fileExtension)")
+        let archive = unusedURL(in: destinationParent, base: backupBaseName(name), extension: format.fileExtension)
 
+        let rootPath = sourceRoot.standardizedFileURL.path + "/"
+        var sizes: [String: Int64] = [:]
+        for name in folders {
+            let keys: [URLResourceKey] = [.fileSizeKey, .isRegularFileKey]
+            guard let walk = fm.enumerator(at: sourceRoot.appendingPathComponent(name), includingPropertiesForKeys: keys) else { continue }
+            for case let url as URL in walk {
+                let leaf = url.lastPathComponent
+                guard !leaf.hasPrefix("._"), leaf != ".DS_Store",
+                      let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+                sizes[String(url.standardizedFileURL.path.dropFirst(rootPath.count))] = Int64(values.fileSize ?? 0)
+            }
+        }
+        var state = ArchiveProgress(bytesTotal: sizes.values.reduce(0, +), filesTotal: sizes.count)
+        progress?(state)
+
+        // Level 1 is about ten times faster than the default on FITS for roughly 30% larger archives.
         let tar = Process()
         tar.executableURL = BackupFormat.systemArchiver
-        tar.arguments = (format == .zip ? ["--format", "zip", "-cf"] : ["-czf"])
+        tar.arguments = (format == .zip
+                ? ["--format", "zip", "--options", "zip:compression-level=1", "-cvf"]
+                : ["--options", "gzip:compression-level=1", "-cvzf"])
             + [archive.path, "--exclude", "._*", "--exclude", ".DS_Store", "-C", sourceRoot.path]
             + folders.map { $0.hasPrefix("-") ? "./\($0)" : $0 }
         tar.environment = ["COPYFILE_DISABLE": "1"]
         let errors = Pipe()
         tar.standardError = errors
         tar.standardOutput = FileHandle.nullDevice
+        guard job?.attach(tar) ?? true else { throw ArchiveJob.Cancelled() }
         try tar.run()
-        let message = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        if job?.isCancelled == true { tar.terminate() }
+
+        // tar names each entry as it starts writing it, so a file counts as done when the next one starts.
+        var messages: [String] = []
+        var pending = Data()
+        var writing: Int64?
+        func finishWriting() {
+            guard let size = writing else { return }
+            state.bytesDone += size
+            state.filesDone += 1
+            writing = nil
+        }
+        let reader = errors.fileHandleForReading
+        while true {
+            let chunk = reader.availableData
+            if chunk.isEmpty { break }
+            pending.append(chunk)
+            while let newline = pending.firstIndex(of: 0x0A) {
+                let line = String(decoding: pending[pending.startIndex..<newline], as: UTF8.self)
+                pending.removeSubrange(pending.startIndex...newline)
+                guard line.hasPrefix("a ") else { messages.append(line); continue }
+                var path = String(line.dropFirst(2))
+                if path.hasPrefix("./") { path.removeFirst(2) }
+                guard let size = sizes[path] else { continue }
+                finishWriting()
+                writing = size
+                state.currentFile = path
+                progress?(state)
+            }
+        }
         tar.waitUntilExit()
+        finishWriting()
+        progress?(state)
+        if job?.isCancelled == true {
+            try? fm.removeItem(at: archive)
+            throw ArchiveJob.Cancelled()
+        }
         guard tar.terminationStatus == 0 else {
             try? fm.removeItem(at: archive)
             throw NSError(domain: "SmartTelescopeSort", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "\(format.label) backup failed: \(message.trimmingCharacters(in: .whitespacesAndNewlines))"
+                NSLocalizedDescriptionKey: "\(format.label) backup failed: \(messages.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines))"
             ])
         }
         return archive
+    }
+
+    /// Sends whole capture folders to the Trash (removing them if the volume has none), images and all.
+    static func trashCaptureFolders(names: [String], sourceRoot: URL) -> Int {
+        let fm = FileManager.default
+        var removed = 0
+        for name in Set(names) where !name.isEmpty && !name.lowercased().hasPrefix("targets ") && !name.contains("/") {
+            let folder = sourceRoot.appendingPathComponent(name, isDirectory: true)
+            guard fm.fileExists(atPath: folder.path) else { continue }
+            do {
+                try fm.trashItem(at: folder, resultingItemURL: nil)
+                removed += 1
+            } catch {
+                if (try? fm.removeItem(at: folder)) != nil { removed += 1 }
+            }
+        }
+        return removed
+    }
+
+    /// Image files still inside each capture folder that survived a sort, counted by lowercased extension.
+    static func leftoverImages(captureNames: [String], sourceRoot: URL) -> [String: [String: Int]] {
+        var kept: [String: [String: Int]] = [:]
+        for name in Set(captureNames) where !name.lowercased().hasPrefix("targets ") {
+            let files = imageFiles(under: sourceRoot.appendingPathComponent(name, isDirectory: true), extensions: keepFolderExtensions)
+            guard !files.isEmpty else { continue }
+            kept[name] = files.reduce(into: [:]) { $0[$1.pathExtension.lowercased(), default: 0] += 1 }
+        }
+        return kept
     }
 
     /// True while any TIFF, FITS, JPG or PNG is left under the folder, sorted type or not.

@@ -21,6 +21,12 @@ final class SortViewModel: ObservableObject {
     }
     private static let backupFormatKey = "SmartTelescopeSort.backupFormat"
     @Published var backupFailed = false
+    /// Set while a zip or tarball backup runs; drives the progress sheet.
+    @Published var backupProgress: ArchiveProgress?
+    @Published var backupTitle = ""
+    private(set) var backupStarted = Date()
+    private var backupJob: ArchiveJob?
+    var isBackingUp: Bool { backupJob != nil }
 
     /// Offer free archiver apps when the built-in one is missing or a backup just failed.
     var showArchiverLinks: Bool { !BackupFormat.systemArchiverAvailable || backupFailed }
@@ -212,7 +218,12 @@ final class SortViewModel: ObservableObject {
     }
 
     var canSortOrCleanup: Bool {
-        actionableCount > 0 || !spentCaptureNames.isEmpty
+        actionableCount > 0 || !spentCaptureNames.isEmpty || !finishedCaptureNames.isEmpty
+    }
+
+    /// Nothing to move or remove except finished folders still holding unticked image types.
+    var onlyFinishedFolders: Bool {
+        actionableCount == 0 && spentCaptureNames.isEmpty && !finishedCaptureNames.isEmpty
     }
 
     func refresh() {
@@ -294,7 +305,11 @@ final class SortViewModel: ObservableObject {
     }
 
     func beginSortFlow() {
-        guard canSortOrCleanup else { return }
+        guard canSortOrCleanup, !isBackingUp else { return }
+        if onlyFinishedFolders {
+            askAboutFinishedFolders()
+            return
+        }
         if plannedCount == 0, summary.duplicates > 0 {
             showDuplicateConfirm = true
             return
@@ -320,22 +335,78 @@ final class SortViewModel: ObservableObject {
             status = "No Backup Storage location — nothing was moved."
             return
         }
+        guard !isBackingUp else { return }
+        guard let backupName = askBackupName(kind: "\(format.label) (.\(format.fileExtension))", destination: destination) else {
+            status = "Backup cancelled — nothing was moved."
+            return
+        }
         let names = Array(Set(entries.map(\.captureFolder)))
         let source = URL(fileURLWithPath: sourcePath)
-        isBusy = true
+        let job = ArchiveJob()
+        backupJob = job
+        backupStarted = Date()
+        backupTitle = "\(backupName).\(format.fileExtension) → \(destination.path)"
+        backupProgress = ArchiveProgress()
         status = "Creating \(format.label) backup in \(destination.path)…"
-        defer { isBusy = false }
+        defer {
+            backupJob = nil
+            backupProgress = nil
+        }
+        let report: @Sendable (ArchiveProgress) -> Void = { [weak self] progress in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    if self?.backupJob === job { self?.backupProgress = progress }
+                }
+            }
+        }
         do {
             let archive = try await Task.detached(priority: .userInitiated) {
-                try CaptureSorter.archiveCaptureFolders(names: names, sourceRoot: source, destinationParent: destination, format: format)
+                try CaptureSorter.archiveCaptureFolders(
+                    names: names, sourceRoot: source, destinationParent: destination, format: format,
+                    name: backupName, job: job, progress: report
+                )
             }.value
             backupFailed = false
             status = archive.map { "Backup complete: \($0.lastPathComponent) in \(destination.path)" } ?? "No capture folders to back up."
-            showSortConfirm = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                self?.showSortConfirm = true
+            }
+        } catch is ArchiveJob.Cancelled {
+            status = "Backup cancelled — nothing was moved."
         } catch {
             backupFailed = true
             status = "Backup failed — nothing was moved. \(error.localizedDescription)"
         }
+    }
+
+    func cancelBackup() {
+        backupJob?.cancel()
+    }
+
+    /// Objects being sorted plus the date and time, e.g. "MOON Backup 2026-10-03 15-27".
+    var suggestedBackupName: String {
+        let objects = Array(Set(entries.filter { $0.files > 0 }.map(\.object))).sorted()
+        let label = objects.isEmpty ? "Captures" : objects.count <= 3 ? objects.joined(separator: " ") : "\(objects.count) objects"
+        let stamp = DateFormatter()
+        stamp.dateFormat = "yyyy-MM-dd HH-mm"
+        return "\(label) Backup \(stamp.string(from: Date()))"
+    }
+
+    /// Asks what to call the backup; nil when cancelled.
+    private func askBackupName(kind: String, destination: URL) -> String? {
+        let alert = NSAlert()
+        alert.messageText = "Name this backup"
+        alert.informativeText = "\(kind) of the capture folders will be saved in \(destination.path). A number is added if the name is already used."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
+        field.stringValue = suggestedBackupName
+        field.placeholderString = CaptureSorter.defaultBackupName
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Start Backup")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        return CaptureSorter.backupBaseName(field.stringValue)
     }
 
     /// Asks about duplicates once the dialog that triggered this has closed; SwiftUI shows one at a time.
@@ -363,7 +434,8 @@ final class SortViewModel: ObservableObject {
         if libraryFolders[.backup] == nil {
             chooseLibraryFolder(.backup)
         }
-        guard let url = libraryFolders[.backup] else {
+        guard let url = libraryFolders[.backup],
+              let backupName = askBackupName(kind: "A folder copy", destination: url) else {
             status = "Backup cancelled — nothing was moved."
             return
         }
@@ -373,7 +445,8 @@ final class SortViewModel: ObservableObject {
             let result = try CaptureSorter.backupCaptureFolders(
                 entries: entries,
                 sourceRoot: URL(fileURLWithPath: sourcePath),
-                destinationParent: url
+                destinationParent: url,
+                name: backupName
             )
             status = "Backup complete: \(result.folders) folders (\(result.files) TIFF/FITS) → \(result.destination.path)"
             showSortConfirm = true
@@ -386,18 +459,79 @@ final class SortViewModel: ObservableObject {
         isBusy = true
         defer { isBusy = false }
         do {
-            let result = try CaptureSorter.performSort(
-                entries: entries,
-                sourceRoot: URL(fileURLWithPath: sourcePath),
-                targetsRoot: targetsRoot
-            )
+            let source = URL(fileURLWithPath: sourcePath)
+            let sorted = entries.map(\.captureFolder)
+            let result = try CaptureSorter.performSort(entries: entries, sourceRoot: source, targetsRoot: targetsRoot)
             refresh()
+            let kept = CaptureSorter.leftoverImages(captureNames: sorted, sourceRoot: source)
             status = "Sort complete: \(result.move) moved, \(result.replace) replaced, \(result.removedFolders) capture folders removed."
+                + (kept.isEmpty ? "" : " \(kept.count) left in place holding \(Self.describe(kept.values)).")
                 + (summary.duplicates > 0 ? " \(summary.duplicates) duplicate(s) left in Captures." : "")
-            askAboutDuplicatesLater()
+            if summary.duplicates > 0 {
+                askAboutDuplicatesLater()
+            } else if !kept.isEmpty {
+                keptFolders = kept
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.showKeptFolders = true }
+            }
         } catch {
             status = error.localizedDescription
         }
+    }
+
+    /// Capture folders a sort left behind because they still hold images, with counts by extension.
+    @Published var keptFolders: [String: [String: Int]] = [:]
+    @Published var showKeptFolders = false
+
+    /// File types holding the leftovers that aren't ticked under Files to Move.
+    var keptUnselectedTypes: [SortFileType] {
+        let extensions = Set(keptFolders.values.flatMap(\.keys))
+        return SortFileType.allCases.filter { !fileTypes.contains($0) && !$0.extensions.isDisjoint(with: extensions) }
+    }
+
+    var keptFoldersMessage: String {
+        let lines = keptFolders.keys.sorted().map { "• \($0): \(Self.describe([keptFolders[$0] ?? [:]]))" }
+        let types = keptUnselectedTypes.map(\.label).joined(separator: ", ")
+        return "Everything selected has been sorted out of:\n" + lines.joined(separator: "\n") + "\n\n"
+            + (types.isEmpty ? "" : "\(types) isn't ticked under Files to Move, so those images are still inside. ")
+            + "Yes moves the folder and everything left in it to the Trash. No leaves it in Captures."
+    }
+
+    /// Capture folders with nothing left to sort for the ticked types that still hold other images.
+    var finishedCaptureNames: [String] {
+        let root = URL(fileURLWithPath: sourcePath)
+        return Dictionary(grouping: entries, by: \.captureFolder).compactMap { name, rows in
+            rows.allSatisfy { $0.files == 0 } && CaptureSorter.holdsImages(root.appendingPathComponent(name)) ? name : nil
+        }.sorted()
+    }
+
+    func askAboutFinishedFolders() {
+        keptFolders = CaptureSorter.leftoverImages(captureNames: finishedCaptureNames, sourceRoot: URL(fileURLWithPath: sourcePath))
+        showKeptFolders = !keptFolders.isEmpty
+    }
+
+    func deleteKeptFolders() {
+        let names = Array(keptFolders.keys)
+        keptFolders = [:]
+        let removed = CaptureSorter.trashCaptureFolders(names: names, sourceRoot: URL(fileURLWithPath: sourcePath))
+        refresh()
+        status = "Moved \(removed) finished capture folder(s) to the Trash."
+            + (removed < names.count ? " \(names.count - removed) couldn't be removed." : "")
+    }
+
+    func keepFinishedFolders() {
+        status = "Left \(keptFolders.count) finished capture folder(s) in Captures."
+        keptFolders = [:]
+    }
+
+    func sortKeptTypes() {
+        fileTypes.formUnion(keptUnselectedTypes)
+        keptFolders = [:]
+        if plannedCount > 0 { beginSortFlow() }
+    }
+
+    private static func describe<S: Sequence>(_ counts: S) -> String where S.Element == [String: Int] {
+        let total = counts.reduce(into: [String: Int]()) { $0.merge($1, uniquingKeysWith: +) }
+        return total.sorted { $0.key < $1.key }.map { "\($0.value) \($0.key.uppercased())" }.joined(separator: ", ")
     }
 
     func openUserManual() {
@@ -472,6 +606,18 @@ struct ContentView: View {
                      + (model.summary.duplicates > 0 ? " \(model.summary.duplicates) duplicate(s) already in Targets are left alone; you'll be asked about them next." : ""))
             }
         }
+        .alert(
+            model.keptFolders.count == 1 ? "Delete finished folder?" : "Delete \(model.keptFolders.count) finished folders?",
+            isPresented: $model.showKeptFolders
+        ) {
+            Button("Yes", role: .destructive) { model.deleteKeptFolders() }
+            if !model.keptUnselectedTypes.isEmpty {
+                Button("Sort \(model.keptUnselectedTypes.map(\.label).joined(separator: ", ")) First") { model.sortKeptTypes() }
+            }
+            Button("No", role: .cancel) { model.keepFinishedFolders() }
+        } message: {
+            Text(model.keptFoldersMessage)
+        }
         .alert("Delete duplicates?", isPresented: $model.showDuplicateConfirm) {
             Button("Yes", role: .destructive) { model.deleteDuplicates() }
             Button("No", role: .cancel) { model.keepDuplicates() }
@@ -480,6 +626,71 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showPlanSheet) {
             PlanReviewSheet(model: model)
+        }
+        .sheet(isPresented: Binding(get: { model.backupProgress != nil }, set: { _ in })) {
+            BackupProgressSheet(model: model)
+        }
+    }
+
+    private struct BackupProgressSheet: View {
+        @ObservedObject var model: SortViewModel
+
+        var body: some View {
+            let progress = model.backupProgress ?? ArchiveProgress()
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Backing up capture folders").font(.title3.bold())
+                Text(model.backupTitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                ProgressView(value: progress.fraction)
+                HStack {
+                    Text("\(Self.bytes(progress.bytesDone)) of \(Self.bytes(progress.bytesTotal))")
+                    Spacer()
+                    Text("\(progress.filesDone) of \(progress.filesTotal) files · \(Int(progress.fraction * 100))%")
+                }
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                Text(progress.currentFile.isEmpty ? "Counting files…" : progress.currentFile)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                HStack {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text(timing(at: context.date, fraction: progress.fraction))
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Cancel Backup", role: .cancel) { model.cancelBackup() }
+                        .keyboardShortcut(.cancelAction)
+                }
+                Text("Nothing is moved until the backup finishes and you confirm the sort.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+            .frame(width: 540)
+            .interactiveDismissDisabled()
+        }
+
+        private func timing(at now: Date, fraction: Double) -> String {
+            let elapsed = now.timeIntervalSince(model.backupStarted)
+            var text = "Elapsed \(Self.clock(elapsed))"
+            if fraction > 0.02, fraction < 1 {
+                text += " · about \(Self.clock(elapsed * (1 - fraction) / fraction)) left"
+            }
+            return text
+        }
+
+        private static func clock(_ seconds: TimeInterval) -> String {
+            let s = max(Int(seconds.rounded()), 0)
+            return String(format: "%d:%02d", s / 60, s % 60)
+        }
+
+        private static func bytes(_ count: Int64) -> String {
+            ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
         }
     }
 
@@ -619,19 +830,23 @@ struct ContentView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color(red: 0.44, green: 0.60, blue: 1.0), lineWidth: 1)
-                        .frame(width: 38, height: 38)
-                    Image(systemName: "sparkles.telescope")
-                        .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                if let logo = Self.bigSkyAstroLogo {
+                    Button { NSWorkspace.shared.open(BigSkyAstroWebLinks.home) } label: {
+                        Image(nsImage: logo)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 46)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help("BigSkyAstro — bigskyastro.com")
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Smart Telescope\nSort")
+                    Text("Smart Telescope Sort")
                         .font(.system(size: 17, weight: .bold))
-                        .lineSpacing(-2)
                     Text(model.lockedKind == nil
                          ? "Multi-brand Captures → Targets"
                          : "Independent app. Not affiliated with telescope makers.")
@@ -646,12 +861,13 @@ struct ContentView: View {
                     .font(.system(size: 9, weight: .heavy))
                     .tracking(1.1)
                     .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
-                ForEach(Array(model.telescopeKind.howItWorksLines.enumerated()), id: \.offset) { _, line in
-                    infoLine(icon: line.icon, text: line.text)
-                }
-                infoLine(icon: "externaldrive", text: "Optional backup copies capture folders before anything moves.")
-                infoLine(icon: "doc.on.doc", text: "Files already in Targets are marked Duplicate. You're asked Yes/No before they're deleted.")
-                infoLine(icon: "trash", text: "When a capture has no TIFF/FITS left, that folder is deleted at the Captures root.")
+                infoLine(icon: "folder", text: model.telescopeKind.dropHint + " The layout is detected; Targets {year} folders are skipped.")
+                infoLine(icon: "line.3.horizontal.decrease.circle", text: "Pick a year, a month and the file types to move: TIFF, JPG/JPEG, FITS/FIT or All.")
+                infoLine(icon: "list.bullet.rectangle", text: "Review file plan lists every file with its object, date and target folder.")
+                infoLine(icon: "archivebox", text: "Optional Zip or Tarball backup. You name it, and a progress window shows it running.")
+                infoLine(icon: "arrow.right.doc.on.clipboard", text: "Sort moves the ticked file types into Targets {year}/{object}. A newer copy replaces an older one.")
+                infoLine(icon: "doc.on.doc", text: "Files already in Targets are marked Duplicate. You're asked Yes/No before they go to the Trash.")
+                infoLine(icon: "trash", text: "Emptied capture folders are removed. A folder still holding unticked images asks Yes/No first.")
             }
             .padding(12)
             .background(
@@ -669,28 +885,65 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
             Button {
-                NSWorkspace.shared.open(BigSkyAstroWebLinks.observationPlanner)
+                NSWorkspace.shared.open(BigSkyAstroWebLinks.sourceCode)
             } label: {
-                Label("Astronomy Observation Planner", systemImage: "macwindow")
+                Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                     .font(.system(size: 11, weight: .semibold))
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
-            Button {
-                NSWorkspace.shared.open(BigSkyAstroWebLinks.telescopePlanner)
-            } label: {
-                Label("Smart Telescope Planner", systemImage: "iphone")
-                    .font(.system(size: 11, weight: .semibold))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
+            .help(BigSkyAstroWebLinks.sourceCode.absoluteString)
+            appCard(title: "Astronomy Observation Planner", subtitle: "Mac App Store", icon: "macwindow",
+                    url: BigSkyAstroWebLinks.observationPlanner)
+            appCard(title: "Smart Telescope Planner", subtitle: "iPhone & iPad App Store", icon: "iphone",
+                    url: BigSkyAstroWebLinks.telescopePlanner)
             Text("Nothing moves until you press Sort eligible files.")
-                .font(.system(size: 11))
+                .font(.system(size: 10))
                 .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(24)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
         .frame(width: 290, alignment: .topLeading)
         .background(Color(red: 0.05, green: 0.09, blue: 0.18))
+    }
+
+    private static let bigSkyAstroLogo: NSImage? = Bundle.main.url(forResource: "BigSkyAstro-logo", withExtension: "png")
+        .flatMap(NSImage.init(contentsOf:))
+
+    /// A BigSkyAstro app promoted as a filled card so it stands apart from the plain links.
+    private func appCard(title: String, subtitle: String, icon: String, url: URL) -> some View {
+        Button { NSWorkspace.shared.open(url) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 26, height: 26)
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.18)))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.system(size: 11.5, weight: .bold)).foregroundStyle(.white)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    Text(subtitle).font(.system(size: 10)).foregroundStyle(Color.white.opacity(0.78))
+                }
+                Spacer(minLength: 2)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.85))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(red: 0.24, green: 0.42, blue: 0.95), Color(red: 0.42, green: 0.30, blue: 0.88)],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.white.opacity(0.18))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(url.absoluteString)
     }
 
     private func infoLine(icon: String, text: String) -> some View {
@@ -707,7 +960,7 @@ struct ContentView: View {
     }
 
     private var workspace: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("CAPTURE LIBRARY")
@@ -881,7 +1134,8 @@ struct ContentView: View {
             planBar
             footer
         }
-        .padding(28)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(red: 0.04, green: 0.07, blue: 0.14))
     }
@@ -936,7 +1190,7 @@ struct ContentView: View {
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .foregroundStyle(tableInk)
             .colorScheme(.light)
-            .frame(minHeight: 240)
+            .frame(minHeight: 120, maxHeight: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
@@ -1004,7 +1258,11 @@ struct ContentView: View {
 
     private var planBar: some View {
         HStack {
-            if model.actionableCount == 0, !model.spentCaptureNames.isEmpty {
+            if model.onlyFinishedFolders {
+                Text("\(model.finishedCaptureNames.count) finished capture folder(s): nothing ticked is left to sort, but other images remain.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(red: 0.68, green: 0.74, blue: 0.88))
+            } else if model.actionableCount == 0, !model.spentCaptureNames.isEmpty {
                 Text("\(model.spentCaptureNames.count) emptied capture folder(s) ready to delete at the Captures root.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.68, green: 0.74, blue: 0.88))
@@ -1023,13 +1281,14 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(Color(red: 0.30, green: 0.48, blue: 0.95))
                 .disabled(model.isBusy || (model.planItems.isEmpty && model.entries.isEmpty))
-            Button(model.actionableCount == 0 && !model.spentCaptureNames.isEmpty ? "Remove empty captures"
+            Button(model.onlyFinishedFolders ? "Delete finished folders…"
+                   : model.actionableCount == 0 && !model.spentCaptureNames.isEmpty ? "Remove empty captures"
                    : model.plannedCount == 0 && model.summary.duplicates > 0 ? "Delete duplicates…" : "Sort eligible files") {
                 model.beginSortFlow()
             }
             .buttonStyle(.borderedProminent)
             .tint(Color(red: 0.30, green: 0.48, blue: 0.95))
-            .disabled(!model.canSortOrCleanup || model.isBusy)
+            .disabled(!model.canSortOrCleanup || model.isBusy || model.isBackingUp)
         }
         .padding(14)
         .background(
