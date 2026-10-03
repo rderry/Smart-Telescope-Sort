@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -15,6 +16,8 @@ from reportlab.platypus import (
     ListItem,
     PageBreak,
     Paragraph,
+    Image,
+    KeepTogether,
     Preformatted,
     SimpleDocTemplate,
     Spacer,
@@ -24,6 +27,8 @@ from reportlab.platypus import (
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "Resources" / "Smart-Telescope-Sort-User-Manual.pdf"
+LOGO = ROOT / "Resources" / "BigSkyAstro-logo.png"
+SHOTS = ROOT.parent / "AppStore" / "Images" / "1.1"
 
 NAVY = colors.Color(0.05, 0.09, 0.18)
 INK = colors.Color(0.12, 0.16, 0.24)
@@ -117,11 +122,30 @@ def build():
 
     story = []
 
+    def figure(name, caption, width=6.6 * inch):
+        src = SHOTS / f"{name}.png"
+        if not src.exists():
+            return
+        small = Path("/tmp") / f"sts-manual-{name}.jpg"
+        subprocess.run(["sips", "-s", "format", "jpeg", "-s", "formatOptions", "80", "-Z", "1600",
+                        str(src), "--out", str(small)], check=True, capture_output=True)
+        img = Image(str(small))
+        img.drawHeight = width * img.imageHeight / img.imageWidth
+        img.drawWidth = width
+        story.append(img)
+        story.append(Paragraph(caption, s["caption"]))
+
     # Cover
-    story.append(Spacer(1, 1.0 * inch))
+    story.append(Spacer(1, 0.6 * inch))
+    if LOGO.exists():
+        logo = Image(str(LOGO))
+        logo.drawHeight = 2.6 * inch * logo.imageHeight / logo.imageWidth
+        logo.drawWidth = 2.6 * inch
+        story.append(logo)
+        story.append(Spacer(1, 16))
     story.append(Paragraph("Smart Telescope Sort", s["cover_title"]))
-    story.append(Paragraph("User Manual", s["cover_sub"]))
-    story.append(Paragraph("macOS", s["cover_sub"]))
+    story.append(Paragraph("User Manual · Version 1.1", s["cover_sub"]))
+    story.append(Paragraph("macOS · Free and open source", s["cover_sub"]))
     story.append(
         Paragraph(
             '© 2026 <link href="https://BigSkyAstro.com" color="blue"><u>BigSkyAstro.com</u></link>',
@@ -130,134 +154,131 @@ def build():
     )
     story.append(
         Paragraph(
-            "Organize TIFF and FITS captures from several smart-telescope brands into one "
-            "year / object library. This app does not connect to the telescope — you copy "
-            "sessions onto disk first, choose the matching telescope type, then Sort.",
+            "Organize TIFF, FITS and JPG captures from several smart-telescope brands into one "
+            "year / object library. The app does not connect to the telescope: you copy "
+            "sessions onto your Mac first, choose that Captures folder, and the app recognizes "
+            "the folder layout for you.",
             s["purpose"],
         )
     )
-    story.append(
-        Paragraph(
-            "Separate from the Vaonis-only <b>Vespera Sort program</b>. Demo trees live next "
-            "to this project under <font face='Courier'>Demo Captures/</font>.",
-            s["body"],
-        )
-    )
+    figure("01-layout-detected", "The main window: the folder layout is detected, and every capture folder is "
+           "listed with its object, file count and destination before anything moves.")
     story.append(PageBreak())
 
     # 1 Assumptions
     story.append(Paragraph("1. Assumptions (read this first)", s["h1"]))
-    story.append(
-        Paragraph(
-            "These assumptions are built into every telescope profile. If your workflow "
-            "breaks them, Sort will mis-label objects or find nothing.",
-            s["body"],
-        )
-    )
     story.append(bullets([
-        "<b>You already moved files off the scope</b> (USB, FTP, or Wi‑Fi). Sort never talks "
+        "<b>You already moved files off the scope</b> (USB, FTP, or Wi-Fi). The app never talks "
         "to Vaonis, Seestar, DWARF, or Origin hardware.",
-        "<b>Source Captures is one brand at a time.</b> Pick the telescope type in the "
-        "sidebar to match the folder you point at. Do not mix Seestar albums and Vaonis "
-        "dated sessions in the same Source Captures root for one preview.",
-        "<b>Only TIFF / TIF / FIT / FITS are sorted.</b> JPG previews (Photos, phone album) "
-        "are ignored. For processing keep TIFF/FITS; JPG is for viewing/sharing only.",
-        "<b>Apple Photos is not a source.</b> Export to Files / a Captures folder if images "
+        "<b>One brand per Captures folder.</b> The layout is detected from the folder you choose. "
+        "Do not mix Seestar albums and Vaonis dated sessions in the same Captures folder.",
+        "<b>You choose the file types:</b> TIFF, JPG / JPEG, FITS / FIT, or All. TIFF and FITS "
+        "are ticked by default; JPG is usually for viewing and sharing.",
+        "<b>Apple Photos is not a source.</b> Export to a Captures folder if images "
         "only live in Photos.",
-        "<b>Destination is always the same layout for every brand:</b> "
-        "<font face='Courier'>Targets {year}/{DSO}/</font> under your Source Captures folder.",
+        "<b>Every brand uses the same library layout:</b> "
+        "<font face='Courier'>Targets {year}/{object}/</font> inside your Original Targets folder.",
         "<b>Year</b> comes from dated folder names when present; otherwise from the newest "
         "image file’s modification date.",
-        "<b>DSO name</b> is decoded from observation / album / object folder names "
-        "(normalized to uppercase, spaces → hyphens).",
-        "<b>Replace only when newer.</b> If Targets already has the same filename, Sort "
-        "keeps the newer copy and clears the older source duplicate.",
-        "<b>Emptied parent capture folders are deleted</b> after Sort when no TIFF/FITS remain "
-        "(sidecars go with them). <font face='Courier'>Targets …</font> folders are never "
-        "scanned as sources and are never deleted by cleanup.",
-        "<b>Optional backup</b> copies whole capture folders before any move.",
+        "<b>Object name</b> is decoded from observation / album / object folder names.",
+        "<b>Replace only when newer.</b> If Targets already has the same file name, the newer "
+        "copy wins. Identical or older copies are marked Duplicate and you are asked about them.",
+        "<b>Targets {year}</b> folders are never scanned as sources and are never removed.",
     ], s["bullet"]))
 
-    story.append(Paragraph("1.1 What Sort does not do", s["h2"]))
+    story.append(Paragraph("1.1 What the app does not do", s["h2"]))
     story.append(bullets([
-        "It does not run stacking, stretching, or post-processing.",
-        "It does not implement Unistellar (not in this build).",
-        "It does not invent missing object names — if a dump folder has no usable name, "
-        "the DSO label may be the parent folder name.",
+        "It does not stack, stretch, or post-process images.",
+        "It does not support Unistellar in this version.",
+        "It does not invent missing object names — if a folder has no usable name, "
+        "the object label may be the parent folder name.",
     ], s["bullet"]))
 
-    # 2 Destination
-    story.append(Paragraph("2. Where sorted files go (all telescopes)", s["h1"]))
+    # 2 Folders
+    story.append(Paragraph("2. Your four folders", s["h1"]))
     story.append(
         Paragraph(
-            "After Sort, every brand uses the same library shape so multi-night and "
-            "multi-brand collections stay easy to browse:",
+            "The first time the app opens it asks where three library folders live. Tick "
+            "<b>Save this as default</b> to keep the choice; leave it unticked to use it for "
+            "this session only. Each folder has a <b>Change…</b> button in the main window.",
             s["body"],
         )
     )
+    story.append(bullets([
+        "<b>Source Captures</b> — where you copied the telescope’s sessions. Choose it with the "
+        "<b>…</b> button. The folder layout is detected each time the preview refreshes.",
+        "<b>Original Targets</b> — holds your <font face='Courier'>Targets {year}</font> folders "
+        "of sorted originals. If it is not set, Targets folders stay inside Source Captures.",
+        "<b>Processing Targets</b> — where you process objects, one folder per object (for example "
+        "<font face='Courier'>Vespera Processing</font>). The file plan shows a green check when "
+        "an object already has a processing folder.",
+        "<b>Backup Storage</b> — where backups are written before a sort.",
+    ], s["bullet"]))
     story.append(code_block(
-        "{Source Captures}/Targets {year}/{DSO}/\n"
-        "example:  …/Captures/Targets 2026/M31/\n"
-        "example:  …/Demo Captures/Seestar/Targets 2026/M42/",
+        "{Original Targets}/Targets {year}/{object}/\n"
+        "example:  …/Targets/Targets 2026/M31/\n"
+        "example:  …/Targets/Targets 2026/M42/",
         s["code"],
     ))
     story.append(
         Paragraph(
-            "Parent USB / FTP / dated session folders are emptied as files move. When a "
-            "parent no longer holds TIFF/FITS, Sort removes that parent at the Captures root.",
+            "If the year folder does not exist yet, the app offers to create "
+            "<font face='Courier'>Targets {year}</font> first. No files move when it is created.",
             s["body"],
         )
     )
 
-    # 3 Telescope picker
-    story.append(Paragraph("3. Choose telescope type first", s["h1"]))
-    story.append(
+    # 3 Layouts
+    layouts = [Paragraph("3. Detected folder layouts", s["h1"])]
+    layouts.append(
         Paragraph(
-            "The sidebar <b>Telescope type</b> menu selects the scanner. The app remembers "
-            "your last choice. Then set <b>Source Captures</b> (…) to the folder that holds "
-            "<i>that</i> brand’s sessions — for demos, the brand subfolder under "
-            "<font face='Courier'>Demo Captures/</font>, not the parent.",
+            "Telescope names identify folder layouts only. Smart Telescope Sort is an independent "
+            "app and is not affiliated with, endorsed by, or created by those manufacturers. "
+            "The detected layout is shown under the title, for example "
+            "<i>Dated session folders · detected</i>.",
             s["body"],
         )
     )
-    story.append(code_block(
-        "/Volumes/Large Drive/Smart Telescope Sort program/Demo Captures/\n"
-        "  Vaonis/     ← telescope type: Vaonis\n"
-        "  Seestar/    ← telescope type: Seestar\n"
-        "  DWARF/      ← telescope type: DWARFLAB\n"
-        "  Origin/     ← telescope type: Origin\n"
-        "  README.txt",
-        s["code"],
-    ))
-    story.append(
-        Paragraph(
-            "<b>Review file plan</b> opens a sheet listing every planned move / replace / "
-            "keep (nothing moves yet). <b>Sort eligible files</b> offers backup, then moves.",
-            s["body"],
-        )
-    )
+    t = Table([
+        ["Layout", "Telescopes", "What the folders look like"],
+        ["Dated session folders", "Vespera, Stellina", "2026-09-10_22-15-03_observation_M31"],
+        ["Object album folders", "S30, S30 Pro, S50", "M31/, NGC253/ (or a USB dump of albums)"],
+        ["Session folders", "DWARF 3, II, mini", "20260907_DWARF3_session/M33/"],
+        ["Object-and-date folders", "Origin Mark II", "M31_2026-09-05/"],
+    ], colWidths=[1.7 * inch, 1.5 * inch, 3.6 * inch])
+    t.setStyle(TableStyle([
+        ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 9),
+        ("FONT", (0, 1), (-1, -1), "Helvetica", 9),
+        ("FONT", (2, 1), (2, -1), "Courier", 8),
+        ("TEXTCOLOR", (0, 0), (-1, 0), NAVY),
+        ("BACKGROUND", (0, 0), (-1, 0), CODE_BG),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.4, colors.Color(0.85, 0.88, 0.93)),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    layouts.append(t)
+    story.append(KeepTogether(layouts))
+    story.append(Spacer(1, 8))
 
     # 4 Per brand
     story.append(Paragraph("4. How each telescope gets files onto the Mac", s["h1"]))
     story.append(
         Paragraph(
-            "Offload is done outside this app. Below: how vendors typically expose files, "
-            "what Sort expects after you copy them into Captures, and demo coverage.",
+            "Offload is done outside this app. Below: how vendors typically expose files and "
+            "what the app expects after you copy them into Captures.",
             s["body"],
         )
     )
 
-    story.append(Paragraph("4.1 Vaonis (Vespera / Stellina)", s["h2"]))
+    story.append(Paragraph("4.1 Vespera / Stellina", s["h2"]))
     story.append(bullets([
-        "<b>Off the scope:</b> FTP the Singularity <b>User/</b> dated folders (primary). "
-        "Newer Vespera 3 / Pro 2 also support USB-C transfer. Multi-night: stop each night "
-        "so the project saves; FTP each night’s dated folder.",
-        "<b>On disk (Captures):</b> keep dated names unchanged, e.g. "
+        "<b>Off the scope:</b> FTP the <b>User/</b> dated folders. Newer models also support "
+        "USB-C transfer. Multi-night: stop each night so the project saves, then copy each "
+        "night’s dated folder.",
+        "<b>In Captures:</b> keep dated names unchanged, e.g. "
         "<font face='Courier'>2026-09-21_11-43-55_observation_M31</font> or "
         "<font face='Courier'>…_plan_My_plan</font> with nested "
         "<font face='Courier'>01-observation-…</font> and <font face='Courier'>01-images-…</font>.",
-        "<b>Demo:</b> <font face='Courier'>Demo Captures/Vaonis/</font> — four sessions "
-        "(M31×2, NGC7023, plan Demo_Night).",
     ], s["bullet"]))
     story.append(code_block(
         "User/   (on telescope)\n"
@@ -269,18 +290,15 @@ def build():
         s["code"],
     ))
 
-    story.append(Paragraph("4.2 ZWO Seestar (S30 / S30 Pro / S50)", s["h2"]))
+    story.append(Paragraph("4.2 S30 / S30 Pro / S50", s["h2"]))
     story.append(bullets([
-        "<b>Off the scope:</b> USB cable (drive often named Seestar → <b>MyWorks</b> / object "
-        "folders), Wi‑Fi / Station Mode file share, or app export of <b>FIT</b>. Not FTP-first. "
-        "JPG often lands in the phone album — that is not Sort’s source.",
-        "<b>On disk (Captures):</b> object albums with <font face='Courier'>.fit / .fits</font> "
+        "<b>Off the scope:</b> USB cable (drive often shows <b>MyWorks</b> / object "
+        "folders), Wi-Fi file share, or app export of <b>FIT</b>.",
+        "<b>In Captures:</b> object albums with <font face='Courier'>.fit / .fits</font> "
         "inside (e.g. <font face='Courier'>M31/</font>, or a USB dump containing several albums).",
-        "<b>Demo:</b> <font face='Courier'>Demo Captures/Seestar/</font> — USB dump, Wi‑Fi dump, "
-        "root M45 album, S50 session.",
     ], s["bullet"]))
     story.append(code_block(
-        "Seestar (USB) / MyWorks/\n"
+        "MyWorks/\n"
         "  M31/\n"
         "    ….fit\n"
         "  NGC253/\n"
@@ -289,18 +307,15 @@ def build():
         s["code"],
     ))
 
-    story.append(Paragraph("4.3 DWARFLAB (DWARF 3 / II / mini)", s["h2"]))
+    story.append(Paragraph("4.3 DWARF 3 / II / mini", s["h2"]))
     story.append(bullets([
         "<b>Off the scope:</b> USB mass storage (appears as a disk) and/or FTP "
-        "(often <font face='Courier'>ftp://192.168.88.1</font> on the DWARF Wi‑Fi). "
-        "Session folders hold FITS/TIFF stacks and subs; JPG is for phone viewing.",
-        "<b>On disk (Captures):</b> keep each session folder intact. Object may be a nested "
+        "(often <font face='Courier'>ftp://192.168.88.1</font> on the telescope’s Wi-Fi).",
+        "<b>In Captures:</b> keep each session folder intact. The object may be a nested "
         "folder (e.g. <font face='Courier'>…/M33/</font>) under a dated session.",
-        "<b>Demo:</b> <font face='Courier'>Demo Captures/DWARF/</font> — four sessions "
-        "(DWARF 3, FTP-style, II, mini).",
     ], s["bullet"]))
     story.append(code_block(
-        "DWARF USB / Astronomy / <session>/\n"
+        "Astronomy/<session>/\n"
         "  M33/\n"
         "    stacked.fits\n"
         "    stacked.tiff\n"
@@ -309,69 +324,119 @@ def build():
         s["code"],
     ))
 
-    story.append(Paragraph("4.4 Celestron Origin Mark II", s["h2"]))
+    story.append(Paragraph("4.4 Origin Mark II", s["h2"]))
     story.append(bullets([
         "<b>Off the scope:</b> enable <b>Save Raw Images</b>, then copy via USB stick "
-        "(FAT32/exFAT) from the app File Manager, or FTP to a computer. Stacked JPG to the "
-        "phone gallery is not the Sort path.",
-        "<b>On disk (Captures):</b> folders named object + date, e.g. "
-        "<font face='Courier'>M31_2026-09-05/</font> with <font face='Courier'>.fits</font> "
-        "(lights; sometimes flats/darks). A parent “USB dump” with several object+date "
-        "folders is also supported.",
-        "<b>Demo:</b> <font face='Courier'>Demo Captures/Origin/</font> — three object+date "
-        "folders plus one nested USB dump.",
+        "(FAT32/exFAT) from the app File Manager, or FTP to a computer.",
+        "<b>In Captures:</b> folders named object + date, e.g. "
+        "<font face='Courier'>M31_2026-09-05/</font> with <font face='Courier'>.fits</font>. "
+        "A parent USB dump with several object + date folders also works.",
     ], s["bullet"]))
     story.append(code_block(
         "M31_2026-09-05/\n"
-        "  raw_0001.fits   (or Light01.fits on real Origin)\n"
+        "  raw_0001.fits\n"
         "  raw_0002.fits\n"
         "→ copy into Captures → Sort → Targets 2026/M31/",
         s["code"],
     ))
 
     # 5 Workflow
-    story.append(Paragraph("5. Recommended workflow", s["h1"]))
+    story.append(Paragraph("5. Step by step", s["h1"]))
     story.append(bullets([
-        "Copy sessions off the telescope into a Captures-style folder (or use Demo Captures).",
-        "Launch <b>Smart Telescope Sort</b>.",
-        "Set <b>Telescope type</b> to match those files.",
-        "Set <b>Source Captures</b> (…) to that brand’s folder.",
-        "Refresh preview. Create <font face='Courier'>Targets {year}</font> if offered.",
-        "Use <b>Review file plan</b> to inspect every From → To action.",
-        "Press <b>Sort eligible files</b> → optional backup → Sort now.",
-        "Browse <font face='Courier'>Targets {year}/{DSO}</font> for stacking / archive.",
+        "Copy sessions off the telescope into a Captures folder.",
+        "Open <b>Smart Telescope Sort</b> and answer the folder questions (first launch only).",
+        "Set <b>Source Captures</b> (…) to that folder. The layout is detected.",
+        "Pick a <b>Year</b> and <b>Month</b> (or All), and tick the <b>Files to Move</b>: "
+        "TIFF, JPG / JPEG, FITS / FIT, or All.",
+        "Choose a <b>Backup</b>: Off, Zip (.zip), or Tarball (.tar.gz).",
+        "Press <b>Review file plan</b> to inspect every file, its target folder and status.",
+        "Press <b>Sort eligible files</b>. Name the backup, watch it run, then confirm "
+        "<b>Sort now</b>.",
+        "Answer the Yes / No questions about duplicates and finished folders.",
+        "Browse <font face='Courier'>Targets {year}/{object}</font> for stacking and archive.",
+    ], s["bullet"]))
+    figure("02-review-file-plan", "Review file plan lists every file grouped by capture folder, with its target "
+           "folder, processing folder and status. Nothing has moved yet.")
+
+    # 6 Backups
+    story.append(Paragraph("6. Backups", s["h1"]))
+    story.append(bullets([
+        "<b>Zip or Tarball</b> — chosen in the <b>Backup</b> menu. Before it starts you are asked "
+        "to name it; the suggestion is the objects plus the date and time, e.g. "
+        "<font face='Courier'>M31 M27 Backup 2026-10-03 15-27.tar.gz</font>. A number is added "
+        "if the name is already used.",
+        "A progress window shows the size and file count done, time elapsed and time left. "
+        "<b>Cancel Backup</b> stops it and removes the partial archive; nothing is moved.",
+        "When the backup finishes you are asked to confirm the sort. If it fails, nothing is moved.",
+        "<b>Backup Off</b> — the app still offers <b>Back up first…</b>, which copies the capture "
+        "folders into a named folder in Backup Storage, or <b>Sort without backup</b>.",
+        "Archives are written fast (light compression) using the archiver built into macOS. "
+        "If it is missing or a backup fails, <b>Help → Free Zip &amp; Tarball Apps</b> lists "
+        "free alternatives.",
+    ], s["bullet"]))
+    figure("04-backup-progress", "A named Tarball backup running, with Cancel Backup.", width=5.6 * inch)
+
+    # 7 Clean-up prompts
+    story.append(Paragraph("7. Duplicates and finished folders", s["h1"]))
+    story.append(bullets([
+        "<b>Duplicates</b> — files already in Targets (identical or older) are marked "
+        "<i>Duplicate</i>. After the sort you are asked <b>Delete duplicates?</b> Yes moves them "
+        "to the Trash; the Targets copies are not touched. No leaves them in Captures.",
+        "<b>Emptied capture folders</b> are removed after a successful sort.",
+        "<b>Finished folders</b> — when a capture folder is sorted but still holds images of a "
+        "type you did not tick (for example JPG), you are asked <b>Delete finished folder?</b> "
+        "<b>Yes</b> moves the folder and everything left in it to the Trash, "
+        "<b>Sort JPG / JPEG First</b> ticks that type and sorts it, and <b>No</b> leaves the "
+        "folder in Captures.",
+        "Removed folders go to the Trash where the drive supports it.",
+    ], s["bullet"]))
+    figure("05-finished-folder", "Delete finished folder? — Yes, sort the remaining type first, or No.",
+           width=5.6 * inch)
+
+    # 8 Safety
+    story.append(Paragraph("8. Safety rules", s["h1"]))
+    story.append(bullets([
+        "Nothing moves until you confirm the sort.",
+        "A destination file is replaced only when the source is newer.",
+        "<font face='Courier'>Targets {year}</font> is never scanned as a capture source.",
+        "The Captures folder and Targets year folders are never removed during clean-up.",
+        "Backups copy whole capture folders; they never modify Targets.",
+        "Every deletion asks Yes / No first.",
     ], s["bullet"]))
 
-    # 6 Demo note
-    story.append(Paragraph("6. Demo Captures", s["h1"]))
+    # 9 Open source
+    story.append(Paragraph("9. Free and open source", s["h1"]))
     story.append(
         Paragraph(
-            "Under the project folder, <font face='Courier'>Demo Captures/</font> holds "
-            "placeholder TIFF/FITS trees that mimic a post-transfer layout for each brand. "
-            "They are not real images and not screenshots of vendor Finder windows — they "
-            "exist so the preview and Sort path behave like a user’s machine after USB/FTP copy.",
+            "Smart Telescope Sort is free, and its source code is on GitHub: "
+            '<link href="https://github.com/rderry/Smart-Telescope-Sort" color="blue">'
+            "<u>github.com/rderry/Smart-Telescope-Sort</u></link>. Open it from <b>Source code on "
+            "GitHub</b> in the sidebar or <b>Help → Source Code on GitHub</b>. The app first asks "
+            "for credit, then opens the repository when you click <b>Continue</b>.",
             s["body"],
         )
     )
-    story.append(code_block(
-        "/Volumes/Large Drive/Smart Telescope Sort program/Demo Captures/",
-        s["code"],
-    ))
+    story.append(
+        Paragraph(
+            "If you change it and give it away, please give credit to BigSkyAstro: include the "
+            "BigSkyAstro logo and a link to "
+            '<link href="https://bigskyastro.com" color="blue"><u>bigskyastro.com</u></link>. '
+            "Credit line: <i>“Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com”</i>.",
+            s["body"],
+        )
+    )
 
-    # 7 Safety
-    story.append(Paragraph("7. Safety rules", s["h1"]))
+    story.append(Paragraph("10. Help and support", s["h1"]))
     story.append(bullets([
-        "Nothing moves until you confirm Sort (after the backup offer).",
-        "Replace destination files only when the source is newer.",
-        "Never scan <font face='Courier'>Targets {year}</font> as a capture source.",
-        "Never delete the Captures root or any Targets year folder during cleanup.",
-        "Backup copies whole capture trees; it does not modify Targets.",
+        "Privacy policy: https://bigskyastro.com/privacy",
+        "App page: https://bigskyastro.com/macos/smart-telescope-sort",
+        "Support: https://bigskyastro.com/feedback/smart-telescope-sort · support@bigskyastro.com",
     ], s["bullet"]))
 
     story.append(Spacer(1, 14))
     story.append(
         Paragraph(
-            "End of manual — Help → Smart Telescope Sort User Manual (⇧⌘/) opens this PDF.",
+            "End of manual — Help → Smart Telescope Sort User Manual (Shift-Command-/) opens this PDF.",
             s["caption"],
         )
     )

@@ -15,7 +15,7 @@ Free, open-source macOS app from [BigSkyAstro](https://bigskyastro.com) that mov
 
 ## Credit BigSkyAstro
 
-**If you modify and distribute this app, in source or binary form, please give credit to BigSkyAstro and link to our web page: [https://bigskyastro.com](https://bigskyastro.com).**
+**If you modify and distribute this app, in source or binary form, please give credit to BigSkyAstro: include the BigSkyAstro logo ([`docs/bigskyastro-banner.jpg`](docs/bigskyastro-banner.jpg)) and a link to our web page: [https://bigskyastro.com](https://bigskyastro.com).**
 
 A credit line such as this is enough:
 
@@ -33,6 +33,7 @@ The [LICENSE](LICENSE) makes this credit a condition of redistribution.
 - Asks you to name each backup and shows its progress, with a Cancel button.
 - Marks files already in Targets as duplicates and asks Yes or No before sending them to the Trash.
 - After a sort, asks Yes or No before trashing a finished capture folder that still holds images you didn't choose to move.
+- The Source code on GitHub link asks for this credit, showing the logo and the bigskyastro.com link, then opens this repository when you click Continue.
 
 Independent app. Not affiliated with or created by telescope manufacturers. Model names in the source identify folder layouts only. A modified build should keep the product name free of those trademarks.
 

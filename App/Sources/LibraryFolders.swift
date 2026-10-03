@@ -27,7 +27,7 @@ enum LibraryFolder: String, CaseIterable {
     var detail: String {
         switch self {
         case .originals:
-            return "Choose the folder that holds your Targets {year} folders of sorted originals. Sorted TIFF/FITS go to Targets {year}/{object} inside it."
+            return "Choose the folder that holds your Targets {year} folders of sorted originals. Sorted image files go to Targets {year}/{object} inside it."
         case .processing:
             return "Choose the folder where you process targets, one folder per object (for example Vespera Processing)."
         case .backup:

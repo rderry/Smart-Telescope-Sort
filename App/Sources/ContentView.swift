@@ -24,7 +24,7 @@ final class SortViewModel: ObservableObject {
     /// Set while a zip or tarball backup runs; drives the progress sheet.
     @Published var backupProgress: ArchiveProgress?
     @Published var backupTitle = ""
-    private(set) var backupStarted = Date()
+    var backupStarted = Date()
     private var backupJob: ArchiveJob?
     var isBackingUp: Bool { backupJob != nil }
 
@@ -192,7 +192,7 @@ final class SortViewModel: ObservableObject {
         if summary.older > 0 {
             text += " (\(summary.duplicate) identical, \(summary.older) older than the Targets copy)"
         }
-        return text + ". Delete them from Captures? They go to the Trash, the Targets copies are not touched, and capture folders left with no TIFF/FITS are removed."
+        return text + ". Delete them from Captures? They go to the Trash, the Targets copies are not touched, and capture folders left with no images to sort are removed."
     }
 
     static func statusText(_ items: [SortPlanItem]) -> String {
@@ -448,7 +448,7 @@ final class SortViewModel: ObservableObject {
                 destinationParent: url,
                 name: backupName
             )
-            status = "Backup complete: \(result.folders) folders (\(result.files) TIFF/FITS) → \(result.destination.path)"
+            status = "Backup complete: \(result.folders) folders (\(result.files) image files) → \(result.destination.path)"
             showSortConfirm = true
         } catch {
             status = "Backup failed: \(error.localizedDescription)"
@@ -559,6 +559,12 @@ struct ContentView: View {
         .background(Color(red: 0.02, green: 0.04, blue: 0.08))
         .foregroundStyle(Color(red: 0.92, green: 0.94, blue: 1.0))
         .onAppear {
+            #if SCREENSHOTS
+            if ScreenshotMode.isActive {
+                ScreenshotMode.stage(model)
+                return
+            }
+            #endif
             model.refresh()
             model.askLibraryFoldersIfNeeded()
         }
@@ -600,7 +606,7 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             if model.actionableCount == 0 {
-                Text("No TIFF/FITS left to move. Delete \(model.spentCaptureNames.count) emptied capture folder(s) at the Captures root?")
+                Text("No image files left to move. Delete \(model.spentCaptureNames.count) emptied capture folder(s) at the Captures root?")
             } else {
                 Text("Move \(model.summary.move) new files and replace \(model.summary.replace) older Targets files. Emptied capture folders will be deleted."
                      + (model.summary.duplicates > 0 ? " \(model.summary.duplicates) duplicate(s) already in Targets are left alone; you'll be asked about them next." : ""))
@@ -723,7 +729,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
 
                 if model.planItems.isEmpty {
-                    Text("No TIFF/FITS actions in this preview. Check the Source Captures path and file types.")
+                    Text("No file actions in this preview. Check the Source Captures path and file types.")
                         .padding(.top, 24)
                     Spacer()
                 } else {
@@ -1151,7 +1157,7 @@ struct ContentView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color(red: 0.90, green: 0.93, blue: 1.0))
                 Spacer()
-                Text("Destination shows where TIFF/FITS files will move")
+                Text("Destination shows where image files will move")
                     .font(.system(size: 10))
                     .foregroundStyle(Color(red: 0.70, green: 0.76, blue: 0.88))
             }
