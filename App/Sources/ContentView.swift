@@ -831,9 +831,9 @@ struct ContentView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .center, spacing: 8) {
                 if let logo = Self.bigSkyAstroLogo {
-                    Button { NSWorkspace.shared.open(BigSkyAstroWebLinks.home) } label: {
+                    Link(destination: BigSkyAstroWebLinks.home) {
                         Image(nsImage: logo)
                             .resizable()
                             .interpolation(.high)
@@ -841,11 +841,11 @@ struct ContentView: View {
                             .frame(width: 250, height: 104)
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
-                    .buttonStyle(.plain)
+                    .pointingHandCursor()
                     .padding(.top, 4)
-                    .help("BigSkyAstro — bigskyastro.com")
+                    .help("Open bigskyastro.com")
                 }
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .center, spacing: 3) {
                     Text("Smart Telescope Sort")
                         .font(.system(size: 17, weight: .bold))
                     Text(model.lockedKind == nil
@@ -853,15 +853,24 @@ struct ContentView: View {
                          : "Independent app. Not affiliated with telescope makers.")
                         .font(.system(size: 11))
                         .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
+                    Link(destination: BigSkyAstroWebLinks.home) {
+                        Label("bigskyastro.com", systemImage: "arrow.up.right.square")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
+                    .pointingHandCursor()
                 }
+                .multilineTextAlignment(.center)
             }
-            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 2)
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("HOW IT WORKS")
                     .font(.system(size: 9, weight: .heavy))
                     .tracking(1.1)
                     .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
+                    .frame(maxWidth: .infinity, alignment: .center)
                 infoLine(icon: "folder", text: model.telescopeKind.dropHint + " The layout is detected; Targets {year} folders are skipped.")
                 infoLine(icon: "line.3.horizontal.decrease.circle", text: "Pick a year, a month and the file types to move: TIFF, JPG/JPEG, FITS/FIT or All.")
                 infoLine(icon: "list.bullet.rectangle", text: "Review file plan lists every file with its object, date and target folder.")
@@ -1307,5 +1316,14 @@ struct ContentView: View {
             Spacer()
         }
         .padding(.top, 4)
+    }
+}
+
+private extension View {
+    /// Shows the pointing-hand cursor over clickable links.
+    func pointingHandCursor() -> some View {
+        onHover { inside in
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 }
