@@ -838,11 +838,11 @@ struct ContentView: View {
                             .resizable()
                             .interpolation(.high)
                             .aspectRatio(contentMode: .fit)
-                            .frame(height: 36)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .frame(width: 250, height: 104)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, 6)
+                    .padding(.top, 4)
                     .help("BigSkyAstro — bigskyastro.com")
                 }
                 VStack(alignment: .leading, spacing: 4) {
