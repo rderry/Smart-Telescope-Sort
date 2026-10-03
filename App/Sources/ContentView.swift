@@ -853,12 +853,6 @@ struct ContentView: View {
                          : "Independent app. Not affiliated with telescope makers.")
                         .font(.system(size: 11))
                         .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
-                    Link(destination: BigSkyAstroWebLinks.home) {
-                        Label("bigskyastro.com", systemImage: "arrow.up.right.square")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
-                    .pointingHandCursor()
                 }
                 .multilineTextAlignment(.center)
             }
@@ -895,7 +889,7 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
             Button {
-                NSWorkspace.shared.open(BigSkyAstroWebLinks.sourceCode)
+                SourceCodeCredit.openRepository()
             } label: {
                 Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                     .font(.system(size: 11, weight: .semibold))

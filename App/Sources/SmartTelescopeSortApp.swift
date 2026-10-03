@@ -34,7 +34,7 @@ struct SmartTelescopeSortApp: App {
                     NSWorkspace.shared.open(BigSkyAstroWebLinks.telescopePlanner)
                 }
                 Button("Source Code on GitHub (Open Source)") {
-                    NSWorkspace.shared.open(BigSkyAstroWebLinks.sourceCode)
+                    SourceCodeCredit.openRepository()
                 }
                 Menu("Free Zip & Tarball Apps") {
                     ForEach(ArchiverLinks.all, id: \.title) { link in
@@ -60,6 +60,60 @@ struct SmartTelescopeSortApp: App {
         if FileManager.default.fileExists(atPath: fallback.path) {
             NSWorkspace.shared.open(fallback)
         }
+    }
+}
+
+/// Asks for BigSkyAstro credit before opening the open-source repository.
+enum SourceCodeCredit {
+    @MainActor
+    static func openRepository() {
+        let alert = NSAlert()
+        alert.messageText = "Smart Telescope Sort is open source"
+        alert.informativeText = """
+            If you change it and give it away, please give credit to BigSkyAstro: \
+            include the BigSkyAstro logo and a link to bigskyastro.com.
+
+            Credit line: "Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com"
+            """
+        alert.accessoryView = accessory()
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(BigSkyAstroWebLinks.sourceCode)
+        }
+    }
+
+    @MainActor
+    private static func accessory() -> NSView {
+        let width: CGFloat = 300
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 8
+        if let url = Bundle.main.url(forResource: "BigSkyAstro-logo", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            let logo = NSImageView(image: image)
+            logo.imageScaling = .scaleProportionallyUpOrDown
+            logo.wantsLayer = true
+            logo.layer?.cornerRadius = 8
+            logo.layer?.masksToBounds = true
+            logo.translatesAutoresizingMaskIntoConstraints = false
+            logo.widthAnchor.constraint(equalToConstant: width).isActive = true
+            logo.heightAnchor.constraint(equalToConstant: width * image.size.height / max(image.size.width, 1)).isActive = true
+            stack.addArrangedSubview(logo)
+        }
+        let link = NSButton(title: "https://bigskyastro.com", target: LinkTarget.shared, action: #selector(LinkTarget.openHome))
+        link.isBordered = false
+        link.contentTintColor = .linkColor
+        stack.addArrangedSubview(link)
+        stack.frame = NSRect(origin: .zero, size: stack.fittingSize)
+        return stack
+    }
+
+    private final class LinkTarget: NSObject {
+        static let shared = LinkTarget()
+        @objc func openHome() { NSWorkspace.shared.open(BigSkyAstroWebLinks.home) }
     }
 }
 
