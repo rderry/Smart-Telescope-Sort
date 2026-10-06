@@ -5,6 +5,7 @@
 .vscode/
 .idea/
 DerivedData/
+.build-bins/
 *.app
 .env
 .env.*

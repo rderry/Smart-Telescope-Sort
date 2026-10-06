@@ -3,7 +3,7 @@ import AppKit
 
 @MainActor
 final class SortViewModel: ObservableObject {
-    /// Detected from the Source Captures folder on every refresh, unless the build is locked to one layout.
+    /// Detected from the Capture Folder on every refresh, unless the build is locked to one layout.
     @Published var telescopeKind: TelescopeKind {
         didSet { UserDefaults.standard.set(telescopeKind.rawValue, forKey: TelescopeKind.storageKey) }
     }
@@ -11,11 +11,23 @@ final class SortViewModel: ObservableObject {
     @Published var fileTypes: Set<SortFileType> = Set(SortFileType.defaults) {
         didSet {
             UserDefaults.standard.set(fileTypes.map(\.rawValue).sorted(), forKey: Self.fileTypesKey)
-            refresh()
+            refreshInBackground()
         }
     }
     private static let fileTypesKey = "SmartTelescopeSort.fileTypes"
-    /// Zip or tarball made before a sort; nil turns the archive backup off.
+    /// JSON and astrometry files a folder may be deleted with without asking. Off by default.
+    @Published var deletePermissions = DeletePermissions(
+        json: UserDefaults.standard.bool(forKey: SortViewModel.deleteJSONKey),
+        astrometry: UserDefaults.standard.bool(forKey: SortViewModel.deleteAstrometryKey)
+    ) {
+        didSet {
+            UserDefaults.standard.set(deletePermissions.json, forKey: Self.deleteJSONKey)
+            UserDefaults.standard.set(deletePermissions.astrometry, forKey: Self.deleteAstrometryKey)
+        }
+    }
+    private static let deleteJSONKey = "SmartTelescopeSort.deleteJSON"
+    private static let deleteAstrometryKey = "SmartTelescopeSort.deleteAstrometry"
+    /// Zip or tarball made when the user says Yes to a backup before sorting; nil makes a folder copy instead.
     @Published var backupFormat: BackupFormat? = nil {
         didSet { UserDefaults.standard.set(backupFormat?.rawValue ?? "off", forKey: Self.backupFormatKey) }
     }
@@ -34,8 +46,8 @@ final class SortViewModel: ObservableObject {
     @Published var savedDefaults: Set<LibraryFolder> = []
     private var sessionFolders: [String: URL] = [:]
     private var askedThisSession: Set<String> = []
-    private var processingIndex: [String: URL] = [:]
-    @Published var sourcePath = CaptureSorter.defaultSource.path
+    /// Empty until the user chooses a Capture Folder; nothing is scanned before that.
+    @Published var sourcePath = ""
     @Published var selectedYear = "all"
     @Published var selectedMonth = "all"
     @Published var years: [String] = []
@@ -95,14 +107,47 @@ final class SortViewModel: ObservableObject {
 
     // MARK: Library folders
 
-    /// Where Targets {year} folders live: the chosen Original Targets folder (or its parent when a Targets {year}
-    /// folder itself was picked), else the Source Captures folder.
+    /// Where Targets {year} folders live: the chosen Target Folder (or its parent when a Targets {year}
+    /// folder itself was picked), else the Capture Folder. When that folder holds no Targets {year} folder,
+    /// the nearest folder above it that does is used.
     var targetsRoot: URL {
-        guard let url = libraryFolders[.originals] else { return URL(fileURLWithPath: sourcePath) }
-        if url.lastPathComponent.range(of: #"^Targets \d{4}$"#, options: .regularExpression) != nil {
+        let url = libraryFolders[.originals] ?? URL(fileURLWithPath: sourcePath)
+        if url.lastPathComponent.range(of: Self.targetsYearPattern, options: .regularExpression) != nil {
             return url.deletingLastPathComponent()
         }
-        return url
+        return Self.folderHoldingTargets(from: url) ?? url
+    }
+
+    private static let targetsYearPattern = #"^Targets \d{4}$"#
+
+    /// Where sorted images really go, shown under the Target Folder; a warning when that isn't the folder chosen.
+    var targetFolderNote: (text: String, warning: Bool)? {
+        guard hasCaptureFolder || libraryFolders[.originals] != nil else { return nil }
+        let root = targetsRoot.standardizedFileURL
+        let destination = "Sorted images go to \(root.path)/Targets {year}/{object}"
+        guard let chosen = libraryFolders[.originals]?.standardizedFileURL else {
+            return (destination + ".", false)
+        }
+        if chosen.lastPathComponent.range(of: Self.targetsYearPattern, options: .regularExpression) != nil || chosen == root {
+            return (destination + ".", false)
+        }
+        let capture = URL(fileURLWithPath: sourcePath).standardizedFileURL.path + "/"
+        let inside = hasCaptureFolder && (chosen.path + "/").hasPrefix(capture)
+        return (destination + (inside
+            ? ". The folder chosen is inside the Capture Folder, so the folder above it that holds Targets {year} is used. Choose that folder to avoid confusion."
+            : ". The folder chosen holds no Targets {year} folder, so the folder above it that does is used."), true)
+    }
+
+    private static func folderHoldingTargets(from url: URL) -> URL? {
+        var folder = url.standardizedFileURL
+        while folder.pathComponents.count > 2 {
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+            if names.contains(where: { $0.range(of: targetsYearPattern, options: .regularExpression) != nil }) {
+                return folder
+            }
+            folder = folder.deletingLastPathComponent()
+        }
+        return nil
     }
 
     private func sessionKey(_ folder: LibraryFolder) -> String { folder.rawValue }
@@ -133,13 +178,12 @@ final class SortViewModel: ObservableObject {
 
     func chooseLibraryFolder(_ folder: LibraryFolder) {
         askedThisSession.insert(sessionKey(folder))
-        let start = libraryFolders[folder] ?? (folder == .originals
-            ? URL(fileURLWithPath: sourcePath)
-            : URL(fileURLWithPath: sourcePath).deletingLastPathComponent())
+        let capture = hasCaptureFolder ? URL(fileURLWithPath: sourcePath) : nil
+        let start = libraryFolders[folder] ?? (folder == .originals ? capture : capture?.deletingLastPathComponent())
         guard let choice = folder.ask(startingAt: start) else {
             if libraryFolders[folder] == nil {
                 status = folder == .originals
-                    ? "Original Targets not set — Targets {year} folders stay inside Source Captures."
+                    ? "Target Folder not set — Targets {year} folders go inside the Capture Folder."
                     : "\(folder.title) not set."
             }
             return
@@ -154,45 +198,22 @@ final class SortViewModel: ObservableObject {
             savedDefaults.remove(folder)
             sessionFolders[sessionKey(folder)] = choice.url
         }
-        refresh()
-        status = "\(folder.title): \(choice.url.path)" + (choice.saveAsDefault ? " (saved as default)" : " (this session only)")
-    }
-
-    /// The processing folder for an object, matched by name without regard to case, spaces or dashes.
-    func processingFolder(for object: String) -> URL? {
-        processingIndex[Self.matchKey(object)]
-    }
-
-    private static func matchKey(_ name: String) -> String {
-        name.uppercased().replacingOccurrences(of: #"[\s_-]"#, with: "", options: .regularExpression)
-    }
-
-    private func indexProcessingFolders() {
-        processingIndex = [:]
-        guard let root = libraryFolders[.processing],
-              let kids = try? FileManager.default.contentsOfDirectory(
-                at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return }
-        for kid in kids where (try? kid.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-            processingIndex[Self.matchKey(kid.lastPathComponent)] = kid
-        }
+        refreshInBackground()
     }
 
     var missingYears: [String] {
         Array(Set(entries.filter { !$0.targetExists }.map(\.year))).sorted()
     }
 
-    var plannedCount: Int { summary.move + summary.replace }
-    var actionableCount: Int { summary.move + summary.replace + summary.duplicates }
+    var plannedCount: Int { summary.move }
+    var actionableCount: Int { summary.move + summary.duplicates }
 
     var duplicateItems: [SortPlanItem] { planItems.filter(\.isDuplicate) }
 
     var duplicatePrompt: String {
         let folders = Set(duplicateItems.map(\.captureFolder)).count
-        var text = "\(summary.duplicates) image file(s) in \(folders) capture folder(s) are already in Targets"
-        if summary.older > 0 {
-            text += " (\(summary.duplicate) identical, \(summary.older) older than the Targets copy)"
-        }
-        return text + ". Delete them from Captures? They go to the Trash, the Targets copies are not touched, and capture folders left with no images to sort are removed."
+        return "\(summary.duplicates) image file(s) in \(folders) capture folder(s) are byte-for-byte copies of files in Targets"
+            + ". Delete them from the Capture Folder? They go to the Trash, the copies in the Target Folder are not touched, and capture folders left with no images to sort are removed."
     }
 
     static func statusText(_ items: [SortPlanItem]) -> String {
@@ -201,10 +222,8 @@ final class SortViewModel: ObservableObject {
             return duplicates == 1 ? "Duplicate" : "\(duplicates) duplicates"
         }
         let new = items.filter { $0.action == .move }.count
-        let newer = items.filter { $0.action == .replace }.count
         var parts: [String] = []
         if new > 0 { parts.append("\(new) new") }
-        if newer > 0 { parts.append("\(newer) newer") }
         if duplicates > 0 { parts.append("\(duplicates) duplicate") }
         return parts.joined(separator: " · ")
     }
@@ -213,7 +232,7 @@ final class SortViewModel: ObservableObject {
         let grouped = Dictionary(grouping: entries, by: \.captureFolder)
         let root = URL(fileURLWithPath: sourcePath)
         return grouped.compactMap { name, rows in
-            rows.allSatisfy { $0.files == 0 } && !CaptureSorter.holdsImages(root.appendingPathComponent(name)) ? name : nil
+            !name.isEmpty && rows.allSatisfy { $0.files == 0 } && !CaptureSorter.holdsImages(root.appendingPathComponent(name)) ? name : nil
         }.sorted()
     }
 
@@ -221,63 +240,186 @@ final class SortViewModel: ObservableObject {
         actionableCount > 0 || !spentCaptureNames.isEmpty || !finishedCaptureNames.isEmpty
     }
 
-    /// Nothing to move or remove except finished folders still holding unticked image types.
+    /// Nothing to move or remove except finished folders still holding unchecked image types.
     var onlyFinishedFolders: Bool {
         actionableCount == 0 && spentCaptureNames.isEmpty && !finishedCaptureNames.isEmpty
     }
 
-    func refresh() {
-        isBusy = true
-        defer { isBusy = false }
-        let root = URL(fileURLWithPath: sourcePath)
+    private struct ScanInputs: Sendable {
+        var root: URL
+        var targetsRoot: URL
+        var year: String?
+        var month: String?
+        var kind: TelescopeKind
+        var detectLayout: Bool
+        var extensions: Set<String>
+    }
+
+    private struct ScanOutput: Sendable {
+        var detected: TelescopeKind?
+        var entries: [CaptureEntry] = []
+        var years: [String] = []
+        var excluded = "Targets …"
+        var sourceAvailable = false
+        var plans: [SortPlanItem] = []
+        var summary = SortSummary()
+        var calibration: [SetAsideFolder] = []
+        var plateSolves: [SetAsideFolder] = []
+        var error: String?
+        var cancelled = false
+    }
+
+    /// Bumped by every scan, so a background scan that finishes after a newer one is thrown away.
+    private var scanGeneration = 0
+
+    private func scanInputs() -> ScanInputs {
+        ScanInputs(
+            root: URL(fileURLWithPath: sourcePath),
+            targetsRoot: targetsRoot,
+            year: selectedYear == "all" ? nil : selectedYear,
+            month: selectedMonth == "all" ? nil : selectedMonth,
+            kind: telescopeKind,
+            detectLayout: lockedKind == nil,
+            extensions: fileTypes.reduce(into: []) { $0.formUnion($1.extensions) }
+        )
+    }
+
+    /// The disk work of a refresh: walking the Capture Folder and comparing files with Targets. Runs off the main thread.
+    nonisolated private static func scan(_ inputs: ScanInputs, monitor: ScanMonitor) -> ScanOutput {
+        var output = ScanOutput()
+        CaptureSorter.sortExtensions = inputs.extensions
+        monitor.report(step: 1, "Detecting the telescope layout", force: true)
+        output.detected = inputs.detectLayout ? TelescopeKind.detect(in: inputs.root) : nil
         do {
-            let year = selectedYear == "all" ? nil : selectedYear
-            let month = selectedMonth == "all" ? nil : selectedMonth
-            CaptureSorter.sortExtensions = fileTypes.reduce(into: []) { $0.formUnion($1.extensions) }
-            if lockedKind == nil {
-                let detected = TelescopeKind.detect(in: root)
-                layoutDetected = detected != nil
-                if let detected, detected != telescopeKind { telescopeKind = detected }
-            }
             let result = try CaptureSorter.scan(
-                kind: telescopeKind,
-                sourceRoot: root,
-                targetsRoot: targetsRoot,
-                year: year,
-                month: month
+                kind: output.detected ?? inputs.kind,
+                sourceRoot: inputs.root,
+                targetsRoot: inputs.targetsRoot,
+                year: inputs.year,
+                month: inputs.month,
+                monitor: monitor
             )
-            indexProcessingFolders()
-            entries = result.entries
-            years = result.years
-            excluded = result.excluded
-            sourceAvailable = FileManager.default.fileExists(atPath: root.path)
-            let preview = CaptureSorter.preview(entries: entries)
-            summary = preview.summary
-            planItems = preview.plans
-            entryStatus = Dictionary(grouping: planItems, by: \.entryID).mapValues(Self.statusText)
-            status = !sourceAvailable ? "Source unavailable."
-                : fileTypes.isEmpty ? "Tick at least one file type to move."
-                : "Preview ready for \(telescopeKind.menuTitle) (\(fileTypesSummary)) — no files have been moved."
-            if selectedYear != "all", !years.contains(selectedYear), let first = years.first {
-                selectedYear = first
-            }
+            output.entries = result.entries
+            output.years = result.years
+            output.excluded = result.excluded
+            output.sourceAvailable = FileManager.default.fileExists(atPath: inputs.root.path)
+            (output.plans, output.summary) = CaptureSorter.preview(entries: result.entries, monitor: monitor)
+            try monitor.checkCancelled()
+            (output.plateSolves, output.calibration) = CaptureSorter.setAsideFolders(under: inputs.root, monitor: monitor)
+            try monitor.checkCancelled()
+        } catch is ScanMonitor.Cancelled {
+            output.cancelled = true
         } catch {
-            status = error.localizedDescription
+            output.error = error.localizedDescription
+        }
+        return output
+    }
+
+    private func apply(_ output: ScanOutput) {
+        if lockedKind == nil {
+            layoutDetected = output.detected != nil
+            if let detected = output.detected, detected != telescopeKind { telescopeKind = detected }
+        }
+        if let error = output.error {
+            status = error
             entries = []
             summary = SortSummary()
             planItems = []
             entryStatus = [:]
+            return
+        }
+        entries = output.entries
+        years = output.years
+        excluded = output.excluded
+        sourceAvailable = output.sourceAvailable
+        summary = output.summary
+        planItems = output.plans
+        entryStatus = Dictionary(grouping: planItems, by: \.entryID).mapValues(Self.statusText)
+        calibrationFolders = output.calibration
+        plateSolveFolders = output.plateSolves
+        status = !sourceAvailable ? "Capture Folder unavailable."
+            : fileTypes.isEmpty ? "Check at least one file type under Files to Move."
+            : "Preview ready for \(telescopeKind.menuTitle) (\(fileTypesSummary)) — no files have been moved."
+                + (plateSolveFolders.isEmpty && calibrationFolders.isEmpty ? ""
+                    : " \(plateSolveFolders.count) plate-solve and \(calibrationFolders.count) calibration folder(s) are left out; you'll be asked about them after sorting.")
+        if selectedYear != "all", !years.contains(selectedYear), let first = years.first {
+            selectedYear = first
+        }
+    }
+
+    var hasCaptureFolder: Bool { !sourcePath.isEmpty }
+
+    /// Set while a scan runs; drives the progress sheet.
+    @Published var scanProgress: ScanProgress?
+    var scanStarted = Date()
+    private var scanMonitor: ScanMonitor?
+
+    /// Scans the Capture Folder in the background with the progress sheet up, then runs `completion` with the new plan
+    /// in place. Nothing is scanned until a Capture Folder has been chosen.
+    func refreshInBackground(then completion: (() -> Void)? = nil) {
+        guard hasCaptureFolder else {
+            status = "Choose a Capture Folder to start: click Choose… next to Capture Folder."
+            return
+        }
+        scanGeneration += 1
+        let generation = scanGeneration
+        scanMonitor?.cancel()
+        let monitor = ScanMonitor { [weak self] progress in
+            Task { @MainActor in
+                guard let self, generation == self.scanGeneration, self.scanProgress != nil else { return }
+                self.scanProgress = progress
+            }
+        }
+        scanMonitor = monitor
+        let inputs = scanInputs()
+        isBusy = true
+        sourceAvailable = FileManager.default.fileExists(atPath: inputs.root.path)
+        status = "Scanning the Capture Folder…"
+        scanStarted = Date()
+        scanProgress = ScanProgress(step: 1, phase: "Starting")
+        Task.detached(priority: .userInitiated) {
+            let output = Self.scan(inputs, monitor: monitor)
+            await MainActor.run { [weak self] in
+                guard let self, generation == self.scanGeneration else { return }
+                self.scanProgress = nil
+                self.scanMonitor = nil
+                self.isBusy = false
+                if output.cancelled {
+                    self.status = "Scan cancelled. The list shows the last finished scan; click Refresh preview to scan again."
+                    return
+                }
+                self.apply(output)
+                completion?()
+            }
+        }
+    }
+
+    func cancelScan() {
+        scanMonitor?.cancel()
+    }
+
+    private static let lastCaptureFolderKey = "SmartTelescopeSort.lastCaptureFolder"
+
+    /// After the launch popup closes: ask for the Capture Folder, then any library folder without a default, then scan.
+    func start() {
+        if hasCaptureFolder {
+            askLibraryFoldersIfNeeded()
+            refreshInBackground()
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.chooseSourceFolder() }
         }
     }
 
     /// Opens the per-folder file list (does not move files).
     func reviewFilePlan() {
-        refresh()
-        if planItems.isEmpty, entries.isEmpty {
-            status = "No plan yet — choose a Source Captures folder that holds telescope session folders, then try again."
-            return
+        refreshInBackground { [weak self] in
+            guard let self else { return }
+            if self.planItems.isEmpty, self.entries.isEmpty {
+                self.status = "No plan yet — choose a Capture Folder that holds your telescope's images, then try again."
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self.showPlanSheet = true }
         }
-        showPlanSheet = true
     }
 
     func chooseSourceFolder() {
@@ -285,20 +427,29 @@ final class SortViewModel: ObservableObject {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: sourcePath)
-        panel.message = "Choose the Captures folder that holds your telescope's session folders"
-        if panel.runModal() == .OK, let url = panel.url {
-            sourcePath = url.path
-            refresh()
+        panel.title = "Choose the Capture Folder"
+        panel.message = "Choose the Capture Folder: where your telescope's images are located. Nothing is scanned until you choose."
+        panel.prompt = "Scan This Folder"
+        let last = UserDefaults.standard.string(forKey: Self.lastCaptureFolderKey)
+        panel.directoryURL = URL(fileURLWithPath: hasCaptureFolder ? sourcePath : last ?? "/Volumes")
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else {
+            if !hasCaptureFolder {
+                status = "Choose a Capture Folder to start: click Choose… next to Capture Folder."
+            }
+            return
         }
+        sourcePath = url.path
+        UserDefaults.standard.set(url.path, forKey: Self.lastCaptureFolderKey)
+        askLibraryFoldersIfNeeded()
+        refreshInBackground()
     }
 
     func createMissingTarget() {
         guard let year = pendingCreateYear ?? missingYears.first else { return }
         do {
             let created = try CaptureSorter.createTargetsFolder(year: year, targetsRoot: targetsRoot)
-            status = "Created \(created.path). No capture files were moved."
-            refresh()
+            refreshInBackground { [weak self] in self?.status = "Created \(created.path). No capture files were moved." }
         } catch {
             status = error.localizedDescription
         }
@@ -314,18 +465,29 @@ final class SortViewModel: ObservableObject {
             showDuplicateConfirm = true
             return
         }
+        showBackupOffer = true
+    }
+
+    /// Yes in the "Back up before sorting?" dialog: the chosen archive format, or a folder copy when the format is Off.
+    func backUpThenConfirmSort() {
         if let format = backupFormat {
             Task { await archiveThenConfirmSort(format) }
-            return
+        } else {
+            chooseBackupLocationAndRun()
         }
-        showBackupOffer = true
+    }
+
+    var backupOfferMessage: String {
+        let destination = libraryFolders[.backup]?.path ?? "Backup Storage (you'll be asked where)"
+        let kind = backupFormat.map { "a \($0.label) archive (.\($0.fileExtension))" } ?? "a copy"
+        return "Yes saves \(kind) of the capture folders in \(destination) before anything moves. No sorts without a backup."
     }
 
     /// Zip and/or tarball backup of the capture folders into Backup Storage; the sort is only offered once it succeeds.
     func archiveThenConfirmSort(_ format: BackupFormat) async {
         guard BackupFormat.systemArchiverAvailable else {
             backupFailed = true
-            status = "This Mac's built-in archiver (/usr/bin/tar) is missing — nothing was moved. Use one of the free archivers below, or turn the backup off."
+            status = "This Mac's built-in archiver (/usr/bin/tar) is missing — nothing was moved. Use one of the free archivers below, or sort again and answer No to the backup."
             return
         }
         if libraryFolders[.backup] == nil {
@@ -340,8 +502,8 @@ final class SortViewModel: ObservableObject {
             status = "Backup cancelled — nothing was moved."
             return
         }
-        let names = Array(Set(entries.map(\.captureFolder)))
         let source = URL(fileURLWithPath: sourcePath)
+        let names = CaptureSorter.backupPaths(for: entries, sourceRoot: source)
         let job = ArchiveJob()
         backupJob = job
         backupStarted = Date()
@@ -409,25 +571,20 @@ final class SortViewModel: ObservableObject {
         return CaptureSorter.backupBaseName(field.stringValue)
     }
 
-    /// Asks about duplicates once the dialog that triggered this has closed; SwiftUI shows one at a time.
-    private func askAboutDuplicatesLater() {
-        guard summary.duplicates > 0 else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            self?.showDuplicateConfirm = true
+    func deleteDuplicates() {
+        let source = URL(fileURLWithPath: sourcePath)
+        let result = CaptureSorter.deleteDuplicates(duplicateItems, sourceRoot: source, allowing: withoutAstrometry)
+        let removedHeld = askToDeleteHeld(result.held, offerAstrometry: false) { allowing in
+            CaptureSorter.removeSpentCaptureFolders(captureNames: Array(result.held.keys), sourceRoot: source, allowing: allowing)
+        }
+        refreshInBackground { [weak self] in
+            self?.status = "Deleted \(result.deleted) duplicate(s) from the Capture Folder and removed \(result.removedFolders + removedHeld) emptied capture folder(s)."
+                + (result.skipped > 0 ? " \(result.skipped) skipped because they changed since the preview." : "")
         }
     }
 
-    func deleteDuplicates() {
-        isBusy = true
-        defer { isBusy = false }
-        let result = CaptureSorter.deleteDuplicates(duplicateItems, sourceRoot: URL(fileURLWithPath: sourcePath))
-        refresh()
-        status = "Deleted \(result.deleted) duplicate(s) from Captures and removed \(result.removedFolders) emptied capture folder(s)."
-            + (result.skipped > 0 ? " \(result.skipped) skipped because they changed since the preview." : "")
-    }
-
     func keepDuplicates() {
-        status = "Kept \(summary.duplicates) duplicate(s) in Captures. They stay marked Duplicate, and their capture folders stay until they are deleted."
+        status = "Kept \(summary.duplicates) duplicate(s) in the Capture Folder. They stay marked Duplicate, and their capture folders stay until they are deleted."
     }
 
     func chooseBackupLocationAndRun() {
@@ -456,33 +613,614 @@ final class SortViewModel: ObservableObject {
     }
 
     func performSort() {
-        isBusy = true
-        defer { isBusy = false }
-        do {
-            let source = URL(fileURLWithPath: sourcePath)
-            let sorted = entries.map(\.captureFolder)
-            let result = try CaptureSorter.performSort(entries: entries, sourceRoot: source, targetsRoot: targetsRoot)
-            refresh()
-            let kept = CaptureSorter.leftoverImages(captureNames: sorted, sourceRoot: source)
-            status = "Sort complete: \(result.move) moved, \(result.replace) replaced, \(result.removedFolders) capture folders removed."
-                + (kept.isEmpty ? "" : " \(kept.count) left in place holding \(Self.describe(kept.values)).")
-                + (summary.duplicates > 0 ? " \(summary.duplicates) duplicate(s) left in Captures." : "")
-            if summary.duplicates > 0 {
-                askAboutDuplicatesLater()
-            } else if !kept.isEmpty {
-                keptFolders = kept
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.showKeptFolders = true }
-            }
-        } catch {
-            status = error.localizedDescription
+        guard entries.contains(where: { $0.needsObjectName && $0.files > 0 }) else {
+            sort(entries)
+            return
         }
+        // Wait for the confirmation dialog to close before asking for names.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self else { return }
+            guard let rows = self.askObjectNames(for: self.entries) else {
+                self.status = "Sort cancelled — nothing was moved."
+                return
+            }
+            self.sort(rows)
+        }
+    }
+
+    /// Names every row whose folders don't name an object, all in one list. Unchecked rows are left out, so their
+    /// files stay in the Capture Folder; nil when the user cancels the sort.
+    private func askObjectNames(for rows: [CaptureEntry]) -> [CaptureEntry]? {
+        let unnamed = rows.filter { $0.needsObjectName && $0.files > 0 }
+        let groups = Dictionary(grouping: unnamed, by: \.captureFolder)
+        let requests = groups.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map { key -> NameRequest in
+            let group = groups[key] ?? []
+            return NameRequest(
+                key: key,
+                label: key.isEmpty ? URL(fileURLWithPath: sourcePath).lastPathComponent : key,
+                detail: "\(group.reduce(0) { $0 + $1.files }) image(s) · \(group.first?.yearFolder.lastPathComponent ?? "")",
+                suggestion: group.first?.sessionDate ?? "")
+        }
+        let choices = Set(unnamed.map(\.yearFolder)).flatMap(Self.folderNames(in:))
+        guard let names = askNames(
+            title: "Name the \(requests.count) folder(s) with no object name",
+            message: "No folder names a DSO or other celestial object for these images. Each is filled in with its date; keep it, "
+                + "pick an object already in Targets {year}, or type a name. Uncheck a folder to leave its images in the Capture Folder.",
+            requests: requests,
+            choices: choices,
+            okTitle: "Sort All",
+            cancelTitle: "Cancel Sort"
+        ) else { return nil }
+        return rows.compactMap { row in
+            guard row.needsObjectName, row.files > 0 else { return row }
+            return names[row.captureFolder].map(row.named)
+        }
+    }
+
+    private struct NameRequest {
+        let key: String
+        let label: String
+        let detail: String
+        let suggestion: String
+    }
+
+    /// One dialog listing every request with a checkbox and a name box (existing `choices` offered). Returns the names
+    /// of the checked rows by key; nil when cancelled.
+    private func askNames(title: String, message: String, requests: [NameRequest], choices: [String],
+                          okTitle: String, cancelTitle: String) -> [String: String]? {
+        let choices = Array(Set(choices)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        var checks: [NSButton] = []
+        var boxes: [NSComboBox] = []
+        let grid = NSGridView(numberOfColumns: 3, rows: 0)
+        grid.rowSpacing = 6
+        grid.columnSpacing = 10
+        for request in requests {
+            let check = NSButton(checkboxWithTitle: request.label, target: nil, action: nil)
+            check.state = .on
+            check.lineBreakMode = .byTruncatingMiddle
+            check.widthAnchor.constraint(equalToConstant: 300).isActive = true
+            let box = NSComboBox()
+            box.addItems(withObjectValues: choices)
+            box.completes = true
+            box.numberOfVisibleItems = 14
+            box.placeholderString = "e.g. M31, NGC7000, Moon"
+            box.stringValue = request.suggestion
+            box.widthAnchor.constraint(equalToConstant: 220).isActive = true
+            let detail = NSTextField(labelWithString: request.detail)
+            detail.textColor = .secondaryLabelColor
+            detail.font = .systemFont(ofSize: 11)
+            grid.addRow(with: [check, box, detail])
+            checks.append(check)
+            boxes.append(box)
+        }
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        let document = FlippedView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(grid)
+        NSLayoutConstraint.activate([
+            grid.topAnchor.constraint(equalTo: document.topAnchor, constant: 4),
+            grid.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 4),
+            grid.trailingAnchor.constraint(lessThanOrEqualTo: document.trailingAnchor, constant: -4),
+            grid.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -4),
+        ])
+        let height = min(CGFloat(requests.count) * 32 + 8, 380)
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 720, height: height))
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        scroll.documentView = document
+        document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive = true
+
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.accessoryView = scroll
+        alert.addButton(withTitle: okTitle)
+        alert.addButton(withTitle: cancelTitle)
+        NSApp.activate(ignoringOtherApps: true)
+
+        while true {
+            guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+            var names: [String: String] = [:]
+            var blank = false
+            for (index, request) in requests.enumerated() where checks[index].state == .on {
+                let name = Self.folderName(boxes[index].stringValue)
+                if name.isEmpty { blank = true } else { names[request.key] = name }
+            }
+            if !blank { return names }
+            NSSound.beep()
+        }
+    }
+
+    private final class FlippedView: NSView {
+        override var isFlipped: Bool { true }
+    }
+
+    private static func folderNames(in parent: URL) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(
+            at: parent, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? [])
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .map(\.lastPathComponent)
+    }
+
+    /// A typed object name made safe for a folder: no slashes or colons, no surrounding spaces or dots.
+    private static func folderName(_ typed: String) -> String {
+        typed.replacingOccurrences(of: #"[/:\\]"#, with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ". ").union(.whitespacesAndNewlines))
+    }
+
+    /// Set while files are copied or originals deleted; drives the transfer progress sheet.
+    @Published var transferProgress: TransferProgress?
+    /// Title and note for the transfer sheet when the job isn't a sort.
+    var transferExplanation: (title: String, note: String)?
+    var transferStarted = Date()
+    private var transferMonitor: TransferMonitor?
+    private var transferGeneration = 0
+    /// Copied and checked during this sort. Deleted only when the user says Yes twice once every move is done.
+    private var pendingOriginals: [CopiedItem] = []
+
+    /// Runs `work` off the main thread with the transfer sheet up, then `completion` with its result and whether the
+    /// user stopped it.
+    private func runTransfer<T: Sendable>(_ phase: String, deleting: Bool = false,
+                                          explanation: (title: String, note: String)? = nil,
+                                          work: @escaping @Sendable (TransferMonitor) -> T,
+                                          then completion: @escaping (T, _ stopped: Bool) -> Void) {
+        transferExplanation = explanation
+        transferGeneration += 1
+        let generation = transferGeneration
+        let monitor = TransferMonitor { [weak self] progress in
+            Task { @MainActor in
+                guard let self, generation == self.transferGeneration, self.transferProgress != nil else { return }
+                self.transferProgress = progress
+            }
+        }
+        transferMonitor = monitor
+        isBusy = true
+        transferStarted = Date()
+        transferProgress = TransferProgress(phase: phase, deleting: deleting)
+        Task.detached(priority: .userInitiated) {
+            let result = work(monitor)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.transferProgress = nil
+                self.transferMonitor = nil
+                self.isBusy = false
+                completion(result, monitor.isCancelled)
+            }
+        }
+    }
+
+    func stopTransfer() {
+        transferMonitor?.cancel()
+    }
+
+    /// Waits for the sheet that just closed before showing the next question.
+    private func next(_ step: @escaping @MainActor () -> Void) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            step()
+        }
+    }
+
+    /// Copy then delete: copies and checks every file, asks about plate solves and calibration folders, and only then
+    /// offers to delete the originals.
+    private func sort(_ rows: [CaptureEntry]) {
+        let source = URL(fileURLWithPath: sourcePath)
+        let targets = targetsRoot
+        let sorted = rows.map(\.captureFolder)
+        pendingOriginals = []
+        runTransfer("Copying images", work: { monitor in
+            CaptureSorter.copySort(entries: rows, sourceRoot: source, targetsRoot: targets, monitor: monitor)
+        }, then: { [weak self] result, stopped in
+            guard let self else { return }
+            if let error = result.error {
+                self.status = error
+                return
+            }
+            self.pendingOriginals = result.copied
+            self.status = "Copied \(result.copied.count) image file(s) into Targets {year}/{object}, each checked byte for byte."
+                + (result.failed.isEmpty ? "" : " \(result.failed.count) couldn't be copied and stay where they are.")
+                + (stopped ? " Copying was stopped early." : "")
+            self.next {
+                if stopped {
+                    self.askToDeleteOriginals(sorted: sorted)
+                } else {
+                    self.askAboutSetAsideFolders(.plateSolves) {
+                        self.askAboutSetAsideFolders(.calibration) { self.askToDeleteOriginals(sorted: sorted) }
+                    }
+                }
+            }
+        })
+    }
+
+    /// Once every move is done: asks twice before deleting the originals that were copied, then tidies emptied folders.
+    private func askToDeleteOriginals(sorted: [String]) {
+        let items = pendingOriginals
+        pendingOriginals = []
+        guard !items.isEmpty else {
+            finishCleanup(sorted: sorted, originalsDeleted: true)
+            return
+        }
+        let files = items.filter { !$0.isFolder }.count
+        let folders = items.count - files
+        let what = [files > 0 ? "\(files) image file(s)" : nil, folders > 0 ? "\(folders) plate-solve or calibration folder(s)" : nil]
+            .compactMap { $0 }.joined(separator: " and ")
+
+        let first = NSAlert()
+        first.messageText = "All moves are done. Delete the original folders and files?"
+        first.informativeText = "\(what) were copied and each copy was checked byte for byte against its original. "
+            + "The originals are still in the Capture Folder.\n\nYes deletes the originals. No keeps them; the next scan marks them Duplicate."
+        guard Self.confirm(first) else {
+            keepOriginals(sorted: sorted, what: what)
+            return
+        }
+        let second = NSAlert()
+        second.messageText = "Are you sure?"
+        second.informativeText = "This moves \(what) from the Capture Folder to the Trash (or deletes them outright on a drive without one). "
+            + "The copies in the Target Folder are not touched."
+        guard Self.confirm(second) else {
+            keepOriginals(sorted: sorted, what: what)
+            return
+        }
+        runTransfer("Deleting originals", deleting: true, work: { monitor in
+            CaptureSorter.deleteOriginals(items, monitor: monitor)
+        }, then: { [weak self] result, _ in
+            guard let self else { return }
+            self.status += " Deleted \(result.deleted) original(s)."
+                + (result.skipped.isEmpty ? "" : " \(result.skipped.count) kept because they or their copies changed, or deleting was stopped.")
+            self.next { self.finishCleanup(sorted: sorted, originalsDeleted: true) }
+        })
+    }
+
+    /// A Yes/No question with No as the default.
+    private static func confirm(_ alert: NSAlert) -> Bool {
+        alert.addButton(withTitle: "Yes")
+        alert.addButton(withTitle: "No")
+        alert.buttons[0].hasDestructiveAction = true
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func keepOriginals(sorted: [String], what: String) {
+        status += " Kept the originals of \(what) in the Capture Folder."
+        finishCleanup(sorted: sorted, originalsDeleted: false)
+    }
+
+    /// Removes capture folders the sort left empty, rescans the Capture Folder and, when the originals were deleted,
+    /// offers to delete the processed capture folders and everything left in them.
+    private func finishCleanup(sorted: [String], originalsDeleted: Bool) {
+        if originalsDeleted {
+            let source = URL(fileURLWithPath: sourcePath)
+            let plateSolvesGone = CaptureSorter.plateSolveFolders(under: source).isEmpty
+            let spent = CaptureSorter.removeSpentCaptureFolders(
+                captureNames: sorted, sourceRoot: source,
+                allowing: DeletePermissions(json: deletePermissions.json, astrometry: deletePermissions.astrometry && plateSolvesGone))
+            if spent.removed > 0 {
+                status += " Removed \(spent.removed) emptied capture folder(s)."
+            }
+        }
+        let message = status
+        refreshInBackground { [weak self] in
+            guard let self else { return }
+            self.status = message
+            if originalsDeleted {
+                self.next { self.askToDeleteProcessedFolders(sorted: sorted) }
+            }
+        }
+    }
+
+    /// After the rescan: offers to delete the capture folders this sort processed and all the data left in them, asking
+    /// Yes/No twice. Never offers the Capture Folder itself, a folder holding Targets, the Target Folder or Backup Storage,
+    /// or a folder still holding images that aren't in Targets yet.
+    private func askToDeleteProcessedFolders(sorted: [String]) {
+        let fm = FileManager.default
+        let source = URL(fileURLWithPath: sourcePath).standardizedFileURL
+        let guarded = [targetsRoot, libraryFolders[.originals], libraryFolders[.backup]].compactMap { $0?.standardizedFileURL.path }
+        let unsorted = Set(planItems.filter { $0.action == .move }.map(\.captureFolder))
+        var stillUnsorted = 0
+        let names = CaptureSorter.outermost(sorted).filter { name in
+            let path = source.appendingPathComponent(name).standardizedFileURL.path
+            guard fm.fileExists(atPath: path), !guarded.contains(where: { ($0 + "/").hasPrefix(path + "/") }) else { return false }
+            if unsorted.contains(where: { $0 == name || $0.hasPrefix(name + "/") }) {
+                stillUnsorted += 1
+                return false
+            }
+            return true
+        }
+        let keptNote = stillUnsorted > 0 ? " \(stillUnsorted) processed folder(s) kept because they still hold images not in Targets yet." : ""
+        guard !names.isEmpty else {
+            status += keptNote
+            return
+        }
+        let contents = names.map { CaptureSorter.protectedFiles(in: source.appendingPathComponent($0)) }
+        func summary(_ files: ProtectedFiles) -> String {
+            let parts = [files.json > 0 ? "\(files.json) JSON" : nil, files.astrometry > 0 ? "\(files.astrometry) plate-solve" : nil]
+                .compactMap { $0 } + files.other.sorted { $0.key < $1.key }.map { "\($0.value) \($0.key.uppercased())" }
+            return parts.isEmpty ? "empty folders only" : parts.joined(separator: ", ")
+        }
+        var total = ProtectedFiles()
+        for files in contents {
+            total.json += files.json
+            total.astrometry += files.astrometry
+            total.other.merge(files.other, uniquingKeysWith: +)
+        }
+        let fileCount = total.json + total.astrometry + total.other.values.reduce(0, +)
+        let shown = 10
+        let lines = zip(names, contents).prefix(shown).map { "• \($0): \(summary($1))" }
+
+        let first = NSAlert()
+        first.messageText = "Processing is done. Delete the \(names.count) capture folder(s) and their data?"
+        first.informativeText = "The Capture Folder was scanned again. Everything sorted is in Targets {year}. Left in these folders:\n"
+            + lines.joined(separator: "\n")
+            + (names.count > shown ? "\n…and \(names.count - shown) more" : "")
+            + "\n\nIn all: \(summary(total)).\(keptNote)\n\nYes deletes these folders and everything in them. No keeps them."
+        guard Self.confirm(first) else {
+            status += " Kept the processed capture folders." + keptNote
+            return
+        }
+        let second = NSAlert()
+        second.messageText = "Are you sure?"
+        second.informativeText = "This moves \(names.count) folder(s) and \(fileCount) file(s) (\(summary(total))) from the Capture Folder "
+            + "to the Trash, or deletes them outright on a drive without one. Your sorted images in Targets are not touched."
+        guard Self.confirm(second) else {
+            status += " Kept the processed capture folders." + keptNote
+            return
+        }
+        let folders = names.map { source.appendingPathComponent($0, isDirectory: true) }
+        runTransfer("Deleting capture folders", deleting: true, work: { monitor in
+            CaptureSorter.trashFolders(folders, monitor: monitor)
+        }, then: { [weak self] result, _ in
+            guard let self else { return }
+            let message = self.status + " Deleted \(result.deleted) processed capture folder(s)."
+                + (result.skipped.isEmpty ? "" : " \(result.skipped.count) couldn't be deleted.") + keptNote
+            self.refreshInBackground { self.status = message }
+        })
+    }
+
+    /// Finds byte-identical numbered copies ("IMG_0001 2.jpg"…) in each Targets {year}/{object} folder, lists them and
+    /// asks Yes/No twice before moving the extras to the Trash. One copy of each file is always kept.
+    func removeIdenticalCopiesInTargets() {
+        let targets = targetsRoot
+        runTransfer("Finding identical copies in Targets",
+                    explanation: ("Finding identical copies in Targets",
+                                  "Each Targets {year}/{object} folder is searched for files whose names differ only by a number "
+                                  + "and whose bytes are the same. Nothing is deleted now; you're asked twice first."),
+                    work: { monitor in
+            CaptureSorter.findRedundantCopies(targetsRoot: targets, monitor: monitor)
+        }, then: { [weak self] sets, stopped in
+            guard let self else { return }
+            if stopped {
+                self.status = "Stopped looking for identical copies in Targets. Nothing was deleted."
+                return
+            }
+            guard !sets.isEmpty else {
+                self.status = "No identical copies found in \(targets.path)/Targets {year}."
+                let alert = NSAlert()
+                alert.messageText = "No identical copies in Targets"
+                alert.informativeText = "Every image in each Targets {year}/{object} folder is different from the others."
+                self.next { alert.runModal() }
+                return
+            }
+            self.next { self.askToRemoveRedundantCopies(sets, targetsRoot: targets) }
+        })
+    }
+
+    private func askToRemoveRedundantCopies(_ sets: [RedundantCopies], targetsRoot: URL) {
+        let extras = sets.flatMap(\.extras)
+        let bytes = extras.reduce(Int64(0)) {
+            $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let rootDepth = targetsRoot.standardizedFileURL.pathComponents.count
+        let byObject = Dictionary(grouping: sets) { $0.keep.standardizedFileURL.pathComponents.dropFirst(rootDepth).prefix(2).joined(separator: "/") }
+            .mapValues { $0.reduce(0) { $0 + $1.extras.count } }
+            .sorted { ($1.value, $0.key) < ($0.value, $1.key) }
+        let shown = 10
+        let lines = byObject.prefix(shown).map { "• \($0.key): \($0.value) extra" }
+        let example = sets[0]
+
+        let first = NSAlert()
+        first.messageText = "Delete \(extras.count) identical copies in Targets?"
+        first.informativeText = "Earlier sorts gave clashing names a number, so some images were saved more than once. These files are byte-for-byte "
+            + "the same as another file in the same object folder; one copy of each is kept, the un-numbered one when there is one.\n\n"
+            + lines.joined(separator: "\n")
+            + (byObject.count > shown ? "\n…and \(byObject.count - shown) more folders" : "")
+            + "\n\nFor example \(example.keep.lastPathComponent) is kept and \(example.extras.map(\.lastPathComponent).joined(separator: ", ")) go.\n\n"
+            + "In all: \(extras.count) extra copies of \(sets.count) file(s), \(size).\n\nYes deletes the extra copies. No keeps everything."
+        guard Self.confirm(first) else {
+            status = "Kept all \(extras.count) identical copies in Targets."
+            return
+        }
+        let second = NSAlert()
+        second.messageText = "Are you sure?"
+        second.informativeText = "This moves \(extras.count) file(s) (\(size)) from the Target Folder to the Trash, or deletes them outright on a drive "
+            + "without one. Each is read again and compared byte for byte with the copy that's kept just before it goes. The kept copies are not touched."
+        guard Self.confirm(second) else {
+            status = "Kept all \(extras.count) identical copies in Targets."
+            return
+        }
+        runTransfer("Deleting identical copies in Targets", deleting: true,
+                    explanation: ("Deleting identical copies in Targets",
+                                  "You said Yes twice. One copy of each image stays in Targets; the extra copies go to the Trash."),
+                    work: { monitor in
+            CaptureSorter.removeRedundantCopies(sets, monitor: monitor)
+        }, then: { [weak self] result, _ in
+            guard let self else { return }
+            let message = "Deleted \(result.deleted) identical copies from Targets "
+                + "(\(ByteCountFormatter.string(fromByteCount: result.bytes, countStyle: .file)))."
+                + (result.skipped.isEmpty ? "" : " \(result.skipped.count) kept because they changed, or deleting was stopped.")
+            self.refreshInBackground { self.status = message }
+        })
+    }
+
+
+    /// Lights, Darks, Dark Flats, Flats, Bias and Master* folders in the Capture Folder, never sorted into Targets.
+    @Published var calibrationFolders: [SetAsideFolder] = []
+    /// Plate-solve (astrometry) folders in the Capture Folder, never sorted into Targets.
+    @Published var plateSolveFolders: [SetAsideFolder] = []
+
+    enum SetAsideKind {
+        case plateSolves, calibration
+
+        var noun: String { self == .plateSolves ? "plate-solve folder" : "calibration folder" }
+
+        var explanation: String {
+            self == .plateSolves
+                ? "Plate-solve frames (astrometry.jpeg) the telescope took while pointing and guiding are kept out of the Target Folder:"
+                : "Lights, Darks, Dark Flats, Flats, Bias and Master* folders are kept out of the Target Folder:"
+        }
+
+        func folders(under root: URL) -> [SetAsideFolder] {
+            self == .plateSolves ? CaptureSorter.plateSolveFolders(under: root) : CaptureSorter.calibrationFolders(under: root)
+        }
+    }
+
+    /// Plate-solve moves with every object named, asking in one list for the sessions no folder names. Unchecked
+    /// sessions are left out; nil when the user leaves them all.
+    private func namedPlateSolveMoves(_ folders: [SetAsideFolder]) -> [CaptureSorter.PlateSolveMove]? {
+        let moves = CaptureSorter.plateSolveMoves(folders, sourceRoot: URL(fileURLWithPath: sourcePath))
+        let unnamed = Dictionary(grouping: moves.filter { $0.object == nil }, by: \.session)
+        guard !unnamed.isEmpty else { return moves }
+        let requests = unnamed.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }.map { session -> NameRequest in
+            let group = unnamed[session] ?? []
+            return NameRequest(
+                key: session,
+                label: group.first?.path ?? session,
+                detail: "\(group.count) folder(s) · \(group.reduce(0) { $0 + $1.images }) image(s)",
+                suggestion: group.first?.sessionDate ?? "")
+        }
+        guard let names = askNames(
+            title: "Name the \(requests.count) plate-solve session(s) with no object name",
+            message: "No folder names a DSO or other celestial object for these plate solves. Each is filled in with its date; keep it, "
+                + "pick an object already in Targets {year}, or type a name. They go to Targets {year}/{name}/\(CaptureSorter.plateSolvesFolderName). "
+                + "Uncheck a session to leave it in the Capture Folder.",
+            requests: requests,
+            choices: Set(unnamed.values.joined().map(\.year)).flatMap { year in
+                Self.folderNames(in: targetsRoot.appendingPathComponent("Targets \(year)", isDirectory: true))
+            },
+            okTitle: "Move All",
+            cancelTitle: "Leave All Plate Solves"
+        ) else { return nil }
+        return moves.compactMap { move in
+            guard move.object == nil else { return move }
+            guard let name = names[move.session] else { return nil }
+            var named = move
+            named.object = name
+            return named
+        }
+    }
+
+    /// Asks whether to move, leave or delete one kind of set-aside folder, then runs `done`. Move copies the folders and
+    /// adds them to the originals offered for deletion at the end of the sort.
+    func askAboutSetAsideFolders(_ kind: SetAsideKind, then done: @escaping () -> Void) {
+        let source = URL(fileURLWithPath: sourcePath)
+        let folders = kind.folders(under: source)
+        guard !folders.isEmpty else {
+            done()
+            return
+        }
+        let noun = folders.count == 1 ? kind.noun : kind.noun + "s"
+        let shown = 10
+        let lines = folders.prefix(shown).map { "• \($0.path): \(Self.describe([$0.images]))" }
+        let alert = NSAlert()
+        alert.messageText = "\(folders.count) \(noun) \(folders.count == 1 ? "was" : "were") not sorted"
+        alert.informativeText = kind.explanation + "\n"
+            + lines.joined(separator: "\n")
+            + (folders.count > shown ? "\n…and \(folders.count - shown) more (\(Self.describe(folders.map(\.images))) in all)" : "")
+            + (kind == .plateSolves
+                ? "\n\nMove puts each one with its object's images in Targets {year}/{object}/\(CaptureSorter.plateSolvesFolderName)/{session}. "
+                    + "Or leave them in the Capture Folder, or delete them (they go to the Trash)."
+                : "\n\nMove them to a folder you choose, leave them in the Capture Folder, or delete them (they go to the Trash).")
+        alert.addButton(withTitle: kind == .plateSolves ? "Move to Targets" : "Move…")
+        alert.addButton(withTitle: "Leave")
+        alert.addButton(withTitle: "Delete")
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+        alert.buttons[2].hasDestructiveAction = true
+        NSApp.activate(ignoringOtherApps: true)
+
+        let paths = folders.map(\.path)
+        let left = " Left \(folders.count) \(noun) in the Capture Folder."
+        switch alert.runModal() {
+        case .alertFirstButtonReturn where kind == .plateSolves:
+            guard let moves = namedPlateSolveMoves(folders) else {
+                status += left
+                break
+            }
+            let targets = targetsRoot
+            runTransfer("Copying plate solves", work: { monitor in
+                CaptureSorter.copyPlateSolves(moves, sourceRoot: source, targetsRoot: targets, monitor: monitor)
+            }, then: { [weak self] result, _ in
+                guard let self else { return }
+                self.pendingOriginals += result.copied
+                self.status += " Copied \(result.copied.count) plate-solve folder(s) in with their images: Targets {year}/{object}/\(CaptureSorter.plateSolvesFolderName)."
+                    + (result.failed.isEmpty ? "" : " \(result.failed.count) couldn't be copied.")
+                self.next(done)
+            })
+            return
+        case .alertFirstButtonReturn:
+            let panel = NSOpenPanel()
+            panel.title = "Where should the \(kind.noun)s go?"
+            panel.message = "Each folder keeps its path from the Capture Folder, so folders with the same name don't collide."
+            panel.prompt = "Move Here"
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.canCreateDirectories = true
+            panel.allowsMultipleSelection = false
+            panel.directoryURL = libraryFolders[.originals] ?? source.deletingLastPathComponent()
+            guard panel.runModal() == .OK, let destination = panel.url else {
+                status += left
+                break
+            }
+            runTransfer("Copying \(kind.noun)s", work: { monitor in
+                CaptureSorter.copySetAsideFolders(paths, sourceRoot: source, to: destination, monitor: monitor)
+            }, then: { [weak self] result, _ in
+                guard let self else { return }
+                self.pendingOriginals += result.copied
+                self.status += " Copied \(result.copied.count) \(kind.noun)(s) to \(destination.path)."
+                    + (result.failed.isEmpty ? "" : " \(result.failed.count) couldn't be copied.")
+                self.next(done)
+            })
+            return
+        case .alertThirdButtonReturn:
+            let confirm = NSAlert()
+            confirm.messageText = "Delete \(folders.count) \(noun)?"
+            confirm.informativeText = "They go to the Trash with everything inside them."
+            confirm.addButton(withTitle: "Delete")
+            confirm.addButton(withTitle: "Cancel")
+            confirm.buttons[0].hasDestructiveAction = true
+            guard confirm.runModal() == .alertFirstButtonReturn else {
+                status += left
+                break
+            }
+            var result: FolderCleanup
+            if kind == .plateSolves {
+                result = CaptureSorter.trashCaptureFolders(names: paths, sourceRoot: source, disposable: [],
+                                                           allowing: DeletePermissions(json: true, astrometry: true))
+            } else {
+                result = CaptureSorter.trashCaptureFolders(names: paths, sourceRoot: source,
+                                                           disposable: CaptureSorter.calibrationDisposable, allowing: withoutAstrometry)
+                let held = result.held
+                result.removed += askToDeleteHeld(held, offerAstrometry: false) { allowing in
+                    CaptureSorter.trashCaptureFolders(names: Array(held.keys), sourceRoot: source,
+                                                      disposable: CaptureSorter.calibrationDisposable, allowing: allowing)
+                }
+            }
+            status += " Deleted \(result.removed) \(kind.noun)(s)." + Self.describeKept(result.kept)
+        default:
+            status += left
+        }
+        plateSolveFolders = CaptureSorter.plateSolveFolders(under: source)
+        calibrationFolders = CaptureSorter.calibrationFolders(under: source)
+        next(done)
     }
 
     /// Capture folders a sort left behind because they still hold images, with counts by extension.
     @Published var keptFolders: [String: [String: Int]] = [:]
     @Published var showKeptFolders = false
 
-    /// File types holding the leftovers that aren't ticked under Files to Move.
+    /// File types holding the leftovers that aren't checked under Files to Move.
     var keptUnselectedTypes: [SortFileType] {
         let extensions = Set(keptFolders.values.flatMap(\.keys))
         return SortFileType.allCases.filter { !fileTypes.contains($0) && !$0.extensions.isDisjoint(with: extensions) }
@@ -492,15 +1230,18 @@ final class SortViewModel: ObservableObject {
         let lines = keptFolders.keys.sorted().map { "• \($0): \(Self.describe([keptFolders[$0] ?? [:]]))" }
         let types = keptUnselectedTypes.map(\.label).joined(separator: ", ")
         return "Everything selected has been sorted out of:\n" + lines.joined(separator: "\n") + "\n\n"
-            + (types.isEmpty ? "" : "\(types) isn't ticked under Files to Move, so those images are still inside. ")
-            + "Yes moves the folder and everything left in it to the Trash. No leaves it in Captures."
+            + (types.isEmpty ? "" : "\(types) isn't checked under Files to Move, so those images are still inside. ")
+            + "Yes moves the folder and the images left in it to the Trash; you're asked about JSON files, and a folder holding other files "
+            + "(e.g. .afphoto) is kept. No leaves it in the Capture Folder."
     }
 
-    /// Capture folders with nothing left to sort for the ticked types that still hold other images.
+    /// Capture folders with nothing left to sort for the checked types that still hold other images.
     var finishedCaptureNames: [String] {
         let root = URL(fileURLWithPath: sourcePath)
+        let active = Set(entries.filter { $0.files > 0 }.map(\.captureFolder))
         return Dictionary(grouping: entries, by: \.captureFolder).compactMap { name, rows in
-            rows.allSatisfy { $0.files == 0 } && CaptureSorter.holdsImages(root.appendingPathComponent(name)) ? name : nil
+            guard !name.isEmpty, !active.contains(where: { $0.hasPrefix(name + "/") }) else { return nil }
+            return rows.allSatisfy { $0.files == 0 } && CaptureSorter.holdsImages(root.appendingPathComponent(name)) ? name : nil
         }.sorted()
     }
 
@@ -512,14 +1253,75 @@ final class SortViewModel: ObservableObject {
     func deleteKeptFolders() {
         let names = Array(keptFolders.keys)
         keptFolders = [:]
-        let removed = CaptureSorter.trashCaptureFolders(names: names, sourceRoot: URL(fileURLWithPath: sourcePath))
-        refresh()
-        status = "Moved \(removed) finished capture folder(s) to the Trash."
-            + (removed < names.count ? " \(names.count - removed) couldn't be removed." : "")
+        let source = URL(fileURLWithPath: sourcePath)
+        let result = CaptureSorter.trashCaptureFolders(names: names, sourceRoot: source, allowing: withoutAstrometry)
+        let removed = result.removed + askToDeleteHeld(result.held, offerAstrometry: false) { allowing in
+            CaptureSorter.trashCaptureFolders(names: Array(result.held.keys), sourceRoot: source, allowing: allowing)
+        }
+        refreshInBackground { [weak self] in
+            self?.status = "Moved \(removed) finished capture folder(s) to the Trash."
+                + Self.describeKept(result.kept)
+                + (removed + result.kept.count < names.count ? " \(names.count - removed - result.kept.count) kept." : "")
+        }
+    }
+
+    /// The JSON setting, with astrometry never allowed: used where plate solves haven't been asked about.
+    private var withoutAstrometry: DeletePermissions { DeletePermissions(json: deletePermissions.json) }
+
+    private static func describeKept(_ kept: [String: [String: Int]]) -> String {
+        let kept = kept.mapValues { $0.filter { !CaptureSorter.keepFolderExtensions.contains($0.key) } }.filter { !$0.value.isEmpty }
+        guard !kept.isEmpty else { return "" }
+        var totals: [String: Int] = [:]
+        for counts in kept.values { totals.merge(counts, uniquingKeysWith: +) }
+        let kinds = totals.sorted { $0.value > $1.value }.prefix(4).map { "\($0.value) .\($0.key)" }.joined(separator: ", ")
+        return " \(kept.count) folder(s) kept because they hold other files (\(kinds))."
+    }
+
+    /// Folders held back only by JSON or astrometry files the settings don't allow deleting: asks with a checkbox for
+    /// each kind, then deletes those folders the answer allows through `retry`. Returns how many were removed.
+    private func askToDeleteHeld(_ held: [String: ProtectedFiles], offerAstrometry: Bool,
+                                 retry: (DeletePermissions) -> FolderCleanup) -> Int {
+        let outer = held.keys.filter { name in !held.keys.contains { name.hasPrefix($0 + "/") } }.sorted()
+        let json = outer.reduce(0) { $0 + (held[$1]?.json ?? 0) }
+        let astrometry = outer.reduce(0) { $0 + (held[$1]?.astrometry ?? 0) }
+        let askJSON = json > 0 && !deletePermissions.json
+        let askAstrometry = astrometry > 0 && offerAstrometry && !deletePermissions.astrometry
+        guard askJSON || askAstrometry else { return 0 }
+
+        let shown = 8
+        let alert = NSAlert()
+        alert.messageText = "\(outer.count) emptied folder(s) still hold JSON or plate-solve files"
+        alert.informativeText = outer.prefix(shown).map { name in
+            let files = held[name] ?? ProtectedFiles()
+            return "• \(name): " + [files.json > 0 ? "\(files.json) JSON" : nil, files.astrometry > 0 ? "\(files.astrometry) astrometry" : nil]
+                .compactMap { $0 }.joined(separator: ", ")
+        }.joined(separator: "\n")
+            + (outer.count > shown ? "\n…and \(outer.count - shown) more" : "")
+            + "\n\nCheck what may be deleted with these folders. A folder holding anything left unchecked is kept."
+        let jsonBox = NSButton(checkboxWithTitle: "Delete \(json) JSON file(s): observation, plan and session records", target: nil, action: nil)
+        let astrometryBox = NSButton(checkboxWithTitle: "Delete \(astrometry) astrometry (plate-solve) file(s)", target: nil, action: nil)
+        jsonBox.state = .off
+        astrometryBox.state = .off
+        let stack = NSStackView(views: [askJSON ? jsonBox : nil, askAstrometry ? astrometryBox : nil].compactMap { $0 })
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.frame = NSRect(origin: .zero, size: stack.fittingSize)
+        alert.accessoryView = stack
+        alert.addButton(withTitle: "Delete Checked")
+        alert.addButton(withTitle: "Keep All")
+        alert.buttons[1].keyEquivalent = "\r"
+        alert.buttons[0].keyEquivalent = ""
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return 0 }
+        let allowing = DeletePermissions(
+            json: deletePermissions.json || (askJSON && jsonBox.state == .on),
+            astrometry: (deletePermissions.astrometry && offerAstrometry) || (askAstrometry && astrometryBox.state == .on)
+        )
+        return retry(allowing).removed
     }
 
     func keepFinishedFolders() {
-        status = "Left \(keptFolders.count) finished capture folder(s) in Captures."
+        status = "Left \(keptFolders.count) finished capture folder(s) in the Capture Folder."
         keptFolders = [:]
     }
 
@@ -548,8 +1350,98 @@ final class SortViewModel: ObservableObject {
     }
 }
 
+extension Notification.Name {
+    static let showAssumptions = Notification.Name("SmartTelescopeSort.showAssumptions")
+}
+
+/// What the app takes for granted, shown when it opens and from the Help menu.
+struct AssumptionsSheet: View {
+    @Binding var showAtLaunch: Bool
+    var close: () -> Void
+    @State private var accepted = false
+    @State private var alreadyAgreed = AgreementRecord.isAccepted
+    @State private var agreedDate = AgreementRecord.acceptedDate
+
+    private static let backupNotice = "A BACKUP is highly recommended, on a separate drive if possible. "
+        + "You can delete it once you are satisfied all your data is moved."
+    private static let disclaimer = "Big Sky Astro is not responsible for the loss of data. We have built in many safeguards to prevent it. "
+        + "The user accepts all liability using this freeware."
+
+    private let points = [
+        "Capture Folder: where your images are. All subfolders are searched.",
+        "Images move to the Target Folder by DSO or celestial name: Targets {year}/{object}.",
+        "No object name found? Before sorting you name them all in one list. The date is the default.",
+        "Dates come from folder names, else from the files.",
+        "Only file types checked under Files to Move are moved (TIFF, JPG, FITS).",
+        "Nothing is overwritten. A name used by another night gets a number: img-0001 2.tiff.",
+        "Exact copies are marked Duplicate and deleted only if you say Yes.",
+        "Not sorted: Targets {year} folders, thumbnails, auto-init frames.",
+        "Emptied folders are deleted. JSON and astrometry files only if checked under OK to Delete or you allow it; folders with other files (e.g. .afphoto) are kept.",
+        "After sorting, choose Move, Leave or Delete for plate solves, then for Lights, Darks, Dark Flats, Flats, Bias, Master*.",
+        "Plate solves move in with their images: Targets {year}/{object}/Plate Solves. Unnamed ones are named in one list.",
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Before you sort").font(.title2.bold())
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(points, id: \.self) { point in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text("•").foregroundStyle(.blue)
+                        Text(point).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(.system(size: 14))
+                }
+            }
+            notice(Self.backupNotice, ink: .red, paper: .yellow)
+            notice(Self.disclaimer, ink: .black, paper: .red)
+            if alreadyAgreed {
+                Toggle(isOn: .constant(true)) {
+                    Text("You have already agreed"
+                         + (agreedDate.map { " on \($0.formatted(date: .long, time: .shortened))" } ?? ""))
+                        .font(.system(size: 14, weight: .bold))
+                }
+                .toggleStyle(.checkbox)
+                .disabled(true)
+            } else {
+                Toggle(isOn: $accepted) {
+                    Text("I have read and accept the above").font(.system(size: 14, weight: .bold))
+                }
+                .toggleStyle(.checkbox)
+            }
+            HStack {
+                Toggle("Show this when the app opens", isOn: $showAtLaunch)
+                Spacer()
+                Button("I Understand") {
+                    if !alreadyAgreed {
+                        try? AgreementRecord.record(terms: points + [Self.backupNotice, Self.disclaimer])
+                    }
+                    close()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!accepted && !alreadyAgreed)
+            }
+        }
+        .padding(28)
+        .frame(width: 820)
+        .interactiveDismissDisabled()
+    }
+
+    private func notice(_ text: String, ink: Color, paper: Color) -> some View {
+        Text(text)
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill(paper))
+    }
+}
+
 struct ContentView: View {
     @StateObject private var model = SortViewModel()
+    @AppStorage("SmartTelescopeSort.showAssumptionsAtLaunch") private var showAssumptionsAtLaunch = true
+    @State private var showAssumptions = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -565,8 +1457,17 @@ struct ContentView: View {
                 return
             }
             #endif
-            model.refresh()
-            model.askLibraryFoldersIfNeeded()
+            if showAssumptionsAtLaunch || !AgreementRecord.isAccepted {
+                showAssumptions = true
+            } else {
+                model.start()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showAssumptions)) { _ in
+            showAssumptions = true
+        }
+        .sheet(isPresented: $showAssumptions, onDismiss: { model.start() }) {
+            AssumptionsSheet(showAtLaunch: $showAssumptionsAtLaunch) { showAssumptions = false }
         }
         .confirmationDialog(
             "Create Targets folder?",
@@ -578,22 +1479,22 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Create Targets \(model.pendingCreateYear ?? "") under your Captures folder? No files will be moved.")
+            Text("Create Targets \(model.pendingCreateYear ?? "") in your Target Folder? No files will be moved.")
         }
         .confirmationDialog(
             "Back up before sorting?",
             isPresented: $model.showBackupOffer,
             titleVisibility: .visible
         ) {
-            Button("Back up first…") {
-                model.chooseBackupLocationAndRun()
+            Button("Yes, back up first") {
+                model.backUpThenConfirmSort()
             }
-            Button("Sort without backup", role: .destructive) {
+            Button("No, sort without backup") {
                 model.showSortConfirm = true
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Recommended: copy the capture folders to a backup location first.")
+            Text(model.backupOfferMessage)
         }
         .confirmationDialog(
             "Sort eligible files?",
@@ -606,9 +1507,10 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             if model.actionableCount == 0 {
-                Text("No image files left to move. Delete \(model.spentCaptureNames.count) emptied capture folder(s) at the Captures root?")
+                Text("No image files left to move. Delete \(model.spentCaptureNames.count) emptied capture folder(s) in the Capture Folder?")
             } else {
-                Text("Move \(model.summary.move) new files and replace \(model.summary.replace) older Targets files. Emptied capture folders will be deleted."
+                Text("Copy \(model.summary.move) files into Targets {year}/{object}, checking each copy byte for byte. Nothing in Targets is overwritten. "
+                     + "When all moves are done you're asked twice before the originals and emptied capture folders are deleted."
                      + (model.summary.duplicates > 0 ? " \(model.summary.duplicates) duplicate(s) already in Targets are left alone; you'll be asked about them next." : ""))
             }
         }
@@ -635,6 +1537,112 @@ struct ContentView: View {
         }
         .sheet(isPresented: Binding(get: { model.backupProgress != nil }, set: { _ in })) {
             BackupProgressSheet(model: model)
+        }
+        .sheet(isPresented: Binding(get: { model.scanProgress != nil }, set: { _ in })) {
+            ScanProgressSheet(model: model)
+        }
+        .sheet(isPresented: Binding(get: { model.transferProgress != nil }, set: { _ in })) {
+            TransferProgressSheet(model: model)
+        }
+    }
+
+    private struct TransferProgressSheet: View {
+        @ObservedObject var model: SortViewModel
+
+        var body: some View {
+            let progress = model.transferProgress ?? TransferProgress(phase: "Starting")
+            VStack(alignment: .leading, spacing: 12) {
+                Text(model.transferExplanation?.title ?? (progress.deleting ? progress.phase : "Sorting: copy, check, then delete"))
+                    .font(.title3.bold())
+                Text(model.transferExplanation?.note ?? (progress.deleting
+                     ? "You said Yes twice. Everything sorted is safe in Targets; these go to the Trash."
+                     : "Copy then delete: each file is copied into the Target Folder and checked byte for byte against the original. "
+                        + "Nothing is deleted now. When every move is done you're asked twice before the originals are deleted."))
+                    .font(.system(size: 12))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.blue.opacity(0.10)))
+                ProgressView(value: progress.fraction)
+                HStack {
+                    Text(progress.phase)
+                    Spacer()
+                    Text("\(progress.done) of \(progress.total)")
+                }
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                Text(progress.item.isEmpty ? " " : progress.item)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                HStack {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text("Elapsed \(Self.clock(context.date.timeIntervalSince(model.transferStarted)))")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Stop", role: .cancel) { model.stopTransfer() }
+                        .keyboardShortcut(.cancelAction)
+                        .help(progress.deleting ? "Stop deleting; the rest of the originals are kept." : "Stop copying; originals are never deleted without asking.")
+                }
+            }
+            .padding(24)
+            .frame(width: 560)
+            .interactiveDismissDisabled()
+        }
+
+        private static func clock(_ seconds: TimeInterval) -> String {
+            let s = max(Int(seconds.rounded()), 0)
+            return String(format: "%d:%02d", s / 60, s % 60)
+        }
+    }
+
+    private struct ScanProgressSheet: View {
+        @ObservedObject var model: SortViewModel
+
+        var body: some View {
+            let progress = model.scanProgress ?? ScanProgress(step: 1, phase: "Starting")
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Scanning the Capture Folder").font(.title3.bold())
+                Text(model.sourcePath)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let fraction = progress.fraction {
+                    ProgressView(value: fraction)
+                } else {
+                    ProgressView().progressViewStyle(.linear)
+                }
+                HStack {
+                    Text("Step \(progress.step) of \(ScanProgress.steps): \(progress.phase)")
+                    Spacer()
+                    Text(progress.countText)
+                }
+                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                HStack {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text("Elapsed \(Self.clock(context.date.timeIntervalSince(model.scanStarted)))")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Cancel Scan", role: .cancel) { model.cancelScan() }
+                        .keyboardShortcut(.cancelAction)
+                }
+                Text("Nothing is moved while scanning.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+            .frame(width: 540)
+            .interactiveDismissDisabled()
+        }
+
+        private static func clock(_ seconds: TimeInterval) -> String {
+            let s = max(Int(seconds.rounded()), 0)
+            return String(format: "%d:%02d", s / 60, s % 60)
         }
     }
 
@@ -724,12 +1732,12 @@ struct ContentView: View {
                     Button("Done") { dismiss() }
                         .keyboardShortcut(.defaultAction)
                 }
-                Text("\(groups.count) capture folder(s) · \(model.planItems.count) files: \(model.summary.move) new · \(model.summary.replace) newer · \(model.summary.duplicates) duplicate. Nothing has been moved yet.")
+                Text("\(groups.count) capture folder(s) · \(model.planItems.count) files: \(model.summary.move) new · \(model.summary.duplicates) duplicate. Nothing has been moved yet.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
 
                 if model.planItems.isEmpty {
-                    Text("No file actions in this preview. Check the Source Captures path and file types.")
+                    Text("No file actions in this preview. Check the Capture Folder path and file types.")
                         .padding(.top, 24)
                     Spacer()
                 } else {
@@ -737,7 +1745,7 @@ struct ContentView: View {
                     List {
                         ForEach(groups, id: \.folder) { group in
                             Section {
-                                ForEach(group.items) { PlanRow(item: $0, processing: model.processingFolder(for: $0.object)) }
+                                ForEach(group.items) { PlanRow(item: $0) }
                             } header: {
                                 HStack(spacing: 6) {
                                     Image(systemName: "folder.fill")
@@ -755,7 +1763,7 @@ struct ContentView: View {
                 if model.summary.duplicates > 0 {
                     HStack {
                         Image(systemName: "doc.on.doc").foregroundStyle(.orange)
-                        Text("\(model.summary.duplicates) file(s) are already in Targets and are marked Duplicate or Older copy. Sort leaves them in place.")
+                        Text("\(model.summary.duplicates) file(s) are byte-for-byte copies of files in Targets and are marked Duplicate. Sort leaves them in place.")
                             .font(.callout)
                         Spacer()
                         Button("Delete duplicates…") { confirmDelete = true }
@@ -776,7 +1784,6 @@ struct ContentView: View {
 
     private struct PlanRow: View {
         let item: SortPlanItem
-        let processing: URL?
 
         private static let dateFormat: DateFormatter = {
             let f = DateFormatter()
@@ -790,7 +1797,6 @@ struct ContentView: View {
                 Text("Image file").frame(minWidth: 170, maxWidth: .infinity, alignment: .leading)
                 Text("Date").frame(width: 120, alignment: .leading)
                 Text("Target folder").frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
-                Text("Processing").frame(width: 120, alignment: .leading)
                 Text("Status").frame(width: 100, alignment: .leading)
             }
             .font(.system(size: 10, weight: .heavy))
@@ -812,11 +1818,6 @@ struct ContentView: View {
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
                     .help(item.destination.path)
-                Text(processing.map { "✓ \($0.lastPathComponent)" } ?? "—")
-                    .font(.system(size: 11))
-                    .foregroundStyle(processing == nil ? Color.secondary : Color.green)
-                    .frame(width: 120, alignment: .leading)
-                    .help(processing?.path ?? "No folder for this object in Processing Targets yet")
                 Text(item.action.label)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(color)
@@ -828,9 +1829,7 @@ struct ContentView: View {
         private var color: Color {
             switch item.action {
             case .move: return .green
-            case .replace: return .blue
             case .duplicate: return .orange
-            case .older: return .gray
             }
         }
     }
@@ -875,9 +1874,9 @@ struct ContentView: View {
                 infoLine(icon: "line.3.horizontal.decrease.circle", text: "Pick a year, a month and the file types to move: TIFF, JPG/JPEG, FITS/FIT or All.")
                 infoLine(icon: "list.bullet.rectangle", text: "Review file plan lists every file with its object, date and target folder.")
                 infoLine(icon: "archivebox", text: "Optional Zip or Tarball backup. You name it, and a progress window shows it running.")
-                infoLine(icon: "arrow.right.doc.on.clipboard", text: "Sort moves the ticked file types into Targets {year}/{object}. A newer copy replaces an older one.")
-                infoLine(icon: "doc.on.doc", text: "Files already in Targets are marked Duplicate. You're asked Yes/No before they go to the Trash.")
-                infoLine(icon: "trash", text: "Emptied capture folders are removed. A folder still holding unticked images asks Yes/No first.")
+                infoLine(icon: "arrow.right.doc.on.clipboard", text: "Sort copies the checked file types into Targets {year}/{object} and checks each copy byte for byte. Nothing there is overwritten.")
+                infoLine(icon: "doc.on.doc", text: "Files already in the Target Folder are marked Duplicate. Plate solves go to {object}/Plate Solves.")
+                infoLine(icon: "trash", text: "Originals, then the processed capture folders, are deleted only after you say Yes twice.")
             }
             .padding(12)
             .background(
@@ -890,15 +1889,23 @@ struct ContentView: View {
                 model.openUserManual()
             } label: {
                 Label("Open user manual (PDF)", systemImage: "book.pages")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 11, weight: .bold))
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
             Button {
                 SourceCodeCredit.openRepository()
             } label: {
-                Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
+                Label {
+                    Text("Source code on GitHub")
+                } icon: {
+                    if let logo = Self.gitHubLogo {
+                        Image(nsImage: logo).resizable().scaledToFit().frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    }
+                }
+                .font(.system(size: 11, weight: .semibold))
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
@@ -919,6 +1926,9 @@ struct ContentView: View {
     }
 
     private static let bigSkyAstroLogo: NSImage? = Bundle.main.url(forResource: "BigSkyAstro-logo", withExtension: "png")
+        .flatMap(NSImage.init(contentsOf:))
+
+    private static let gitHubLogo: NSImage? = Bundle.main.url(forResource: "GitHub-logo", withExtension: "png")
         .flatMap(NSImage.init(contentsOf:))
 
     /// A BigSkyAstro app promoted as a filled card so it stands apart from the plain links.
@@ -984,11 +1994,14 @@ struct ContentView: View {
                         .help(model.telescopeKind.compatibilityNote)
                 }
                 Spacer()
-                HStack(spacing: 8) {
-                    Circle().fill(model.sourceAvailable ? Color.green : Color.orange).frame(width: 7, height: 7)
-                    Text(model.sourceAvailable ? "Source available" : "Source unavailable")
-                        .font(.system(size: 11))
-                        .foregroundStyle(model.sourceAvailable ? Color.green : Color.orange)
+                VStack(alignment: .leading, spacing: 4) {
+                    statusLight(!model.hasCaptureFolder ? "No Capture Folder chosen"
+                                : model.sourceAvailable ? "Capture Folder available" : "Capture Folder unavailable",
+                                color: !model.hasCaptureFolder ? .red : model.sourceAvailable ? .green : .orange)
+                    ForEach(LibraryFolder.allCases, id: \.self) { folder in
+                        let chosen = model.libraryFolders[folder] != nil
+                        statusLight("\(folder.title) \(chosen ? "selected" : "not selected")", color: chosen ? .green : .red)
+                    }
                 }
             }
 
@@ -996,16 +2009,18 @@ struct ContentView: View {
                 Image(systemName: "folder.fill")
                     .foregroundStyle(Color(red: 0.45, green: 0.62, blue: 1.0))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("SOURCE CAPTURES")
+                    Text("CAPTURE FOLDER · WHERE THE IMAGES ARE LOCATED")
                         .font(.system(size: 9, weight: .heavy))
                         .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
-                    Text(model.sourcePath)
+                    Text(model.hasCaptureFolder ? model.sourcePath : "Not chosen — click Choose… to pick the folder where your images are")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundStyle(model.hasCaptureFolder ? Color(red: 0.92, green: 0.94, blue: 1.0) : Color(red: 0.90, green: 0.70, blue: 0.35))
                 }
                 Spacer()
-                Button("…") { model.chooseSourceFolder() }
+                Button("Choose…") { model.chooseSourceFolder() }
+                    .disabled(model.isBusy)
                     .buttonStyle(.bordered)
-                Text("\(model.excluded) skipped as sources.")
+                Text("\(model.excluded) folders are skipped.")
                     .font(.system(size: 11))
                     .foregroundStyle(Color(red: 0.90, green: 0.70, blue: 0.35))
             }
@@ -1031,15 +2046,15 @@ struct ContentView: View {
                         ForEach(model.years, id: \.self) { Text($0).tag($0) }
                     }
                     .frame(width: 120)
-                    .onChange(of: model.selectedYear) { _, _ in model.refresh() }
+                    .onChange(of: model.selectedYear) { _, _ in model.refreshInBackground() }
 
                     Picker("Month", selection: $model.selectedMonth) {
                         ForEach(model.months, id: \.id) { Text($0.title).tag($0.id) }
                     }
                     .frame(width: 140)
-                    .onChange(of: model.selectedMonth) { _, _ in model.refresh() }
+                    .onChange(of: model.selectedMonth) { _, _ in model.refreshInBackground() }
 
-                    Button("Refresh preview") { model.refresh() }
+                    Button("Refresh preview") { model.refreshInBackground() }
                         .buttonStyle(.borderedProminent)
                         .tint(Color(red: 0.30, green: 0.48, blue: 0.95))
                 }
@@ -1070,6 +2085,24 @@ struct ContentView: View {
             .padding(.bottom, 8)
 
             HStack(spacing: 16) {
+                Text("OK TO DELETE").font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
+                    .frame(width: 86, alignment: .leading)
+                Toggle("JSON", isOn: $model.deletePermissions.json)
+                    .help("JSON files (observation, plan and session records) left in emptied capture folders.")
+                Toggle("Astrometry", isOn: $model.deletePermissions.astrometry)
+                    .help("Plate-solve files left in emptied capture folders. Never deleted when you choose to leave plate solves.")
+                Text("Unchecked: you're asked before a folder holding them is deleted")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .toggleStyle(.checkbox)
+            .font(.system(size: 12))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+
+            HStack(spacing: 16) {
                 Text("BACKUP").font(.system(size: 9, weight: .heavy))
                     .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
                     .frame(width: 86, alignment: .leading)
@@ -1083,9 +2116,9 @@ struct ContentView: View {
                 .pickerStyle(.menu)
                 .labelsHidden()
                 .frame(width: 150)
-                .help("Zip (.zip) or tarball (.tar.gz) of the capture folders before sorting. Built into macOS — nothing to install.")
+                .help("What Yes makes when Sort asks about a backup: a zip (.zip) or tarball (.tar.gz) of the capture folders, or a folder copy when Off. Built into macOS — nothing to install.")
                 Text(model.backupFormat == nil
-                     ? "Sort offers a folder copy instead"
+                     ? "Sort asks; Yes makes a folder copy"
                      : "→ \(model.libraryFolders[.backup]?.path ?? "Backup Storage (asked when you sort)")")
                     .font(.system(size: 11))
                     .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
@@ -1157,13 +2190,13 @@ struct ContentView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color(red: 0.90, green: 0.93, blue: 1.0))
                 Spacer()
-                Text("Destination shows where image files will move")
+                Text("Target folder shows where the image files will be put")
                     .font(.system(size: 10))
                     .foregroundStyle(Color(red: 0.70, green: 0.76, blue: 0.88))
             }
             Table(model.entries) {
                 TableColumn("Capture folder") { (entry: CaptureEntry) in
-                    Text(entry.captureFolder)
+                    Text(entry.captureFolder.isEmpty ? URL(fileURLWithPath: model.sourcePath).lastPathComponent : entry.captureFolder)
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(tableInk)
                         .lineLimit(1)
@@ -1171,8 +2204,15 @@ struct ContentView: View {
                 .width(min: 180, ideal: 240)
                 TableColumn("Year") { Text($0.year).foregroundStyle(tableInk) }.width(50)
                 TableColumn("Month") { Text($0.month).foregroundStyle(tableInk) }.width(50)
-                TableColumn("DSO object") {
-                    Text($0.object).fontWeight(.semibold).foregroundStyle(tableInk)
+                TableColumn("DSO object") { (entry: CaptureEntry) in
+                    if entry.needsObjectName {
+                        Text("Ask when sorting")
+                            .italic()
+                            .foregroundStyle(.orange)
+                            .help("No folder names a target. You'll be asked which object these images are of; the date \(entry.sessionDate) is the default.")
+                    } else {
+                        Text(entry.object).fontWeight(.semibold).foregroundStyle(tableInk)
+                    }
                 }
                 .width(120)
                 TableColumn("Img folders") { Text("\($0.imageFolders)").foregroundStyle(tableInk) }.width(70)
@@ -1189,13 +2229,14 @@ struct ContentView: View {
                     Text($0.formats.joined(separator: ", ")).foregroundStyle(tableInk)
                 }
                 .width(90)
-                TableColumn("Destination") { (entry: CaptureEntry) in
+                TableColumn("Target folder") { (entry: CaptureEntry) in
                     Text("Targets \(entry.year)/\(entry.object)")
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .foregroundStyle(tableDestination)
+                        .lineLimit(1)
                         .help(entry.targetDirectory.path)
                 }
-                .width(min: 160, ideal: 200)
+                .width(min: 200, ideal: 300)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .foregroundStyle(tableInk)
@@ -1205,21 +2246,34 @@ struct ContentView: View {
         }
     }
 
+    private func statusLight(_ text: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(text).font(.system(size: 11)).foregroundStyle(color)
+        }
+    }
+
     private func libraryRow(_ folder: LibraryFolder) -> some View {
         let url = model.libraryFolders[folder]
         return HStack {
-            Image(systemName: folder == .originals ? "archivebox.fill" : folder == .processing ? "slider.horizontal.3" : "externaldrive.fill")
+            Image(systemName: folder == .originals ? "archivebox.fill" : "externaldrive.fill")
                 .foregroundStyle(Color(red: 0.45, green: 0.62, blue: 1.0))
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(folder.title.uppercased())
+                Text((folder.title + (folder.caption.map { " · \($0)" } ?? "")).uppercased())
                     .font(.system(size: 9, weight: .heavy))
                     .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
-                Text(url?.path ?? (folder == .originals ? "Not set — Targets {year} stay inside Source Captures" : "Not set"))
+                Text(url?.path ?? (folder == .originals ? "Not set — Targets {year} go inside the Capture Folder" : "Not set"))
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(url == nil ? Color(red: 0.90, green: 0.70, blue: 0.35) : Color(red: 0.92, green: 0.94, blue: 1.0))
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if folder == .originals, let note = model.targetFolderNote {
+                    Text(note.text)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(note.warning ? Color(red: 0.90, green: 0.70, blue: 0.35) : Color(red: 0.51, green: 0.58, blue: 0.71))
+                        .lineLimit(2)
+                }
             }
             Spacer()
             if url != nil {
@@ -1228,6 +2282,12 @@ struct ContentView: View {
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
                     .background(Capsule().fill(Color.white.opacity(0.08)))
+            }
+            if folder == .originals {
+                Button("Remove Identical Copies…") { model.removeIdenticalCopiesInTargets() }
+                    .buttonStyle(.bordered)
+                    .disabled(model.isBusy || model.isBackingUp)
+                    .help("Find images saved more than once in Targets {year}/{object} and, after you say Yes twice, keep one copy of each.")
             }
             Button("Change…") { model.chooseLibraryFolder(folder) }
                 .buttonStyle(.bordered)
@@ -1244,7 +2304,7 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.left.arrow.right")
                     .foregroundStyle(Color(red: 0.59, green: 0.68, blue: 1.0))
-                Text("Replace only when newer.\nExisting target files are kept unless the source is newer.")
+                Text("Nothing is overwritten; a clashing name gets a number.\nOnly byte-identical copies count as duplicates.")
                     .font(.system(size: 11))
                     .foregroundStyle(Color(red: 0.56, green: 0.63, blue: 0.78))
             }
@@ -1269,11 +2329,11 @@ struct ContentView: View {
     private var planBar: some View {
         HStack {
             if model.onlyFinishedFolders {
-                Text("\(model.finishedCaptureNames.count) finished capture folder(s): nothing ticked is left to sort, but other images remain.")
+                Text("\(model.finishedCaptureNames.count) finished capture folder(s): nothing checked is left to sort, but other images remain.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.68, green: 0.74, blue: 0.88))
             } else if model.actionableCount == 0, !model.spentCaptureNames.isEmpty {
-                Text("\(model.spentCaptureNames.count) emptied capture folder(s) ready to delete at the Captures root.")
+                Text("\(model.spentCaptureNames.count) emptied capture folder(s) ready to delete in the Capture Folder.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.68, green: 0.74, blue: 0.88))
             } else if model.plannedCount == 0, model.summary.duplicates > 0 {
@@ -1281,7 +2341,7 @@ struct ContentView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.95, green: 0.72, blue: 0.40))
             } else {
-                Text("\(model.plannedCount) files eligible: \(model.summary.move) new moves, \(model.summary.replace) newer replacements."
+                Text("\(model.plannedCount) files eligible: \(model.summary.move) to move."
                      + (model.summary.duplicates > 0 ? " \(model.summary.duplicates) duplicate(s) already in Targets." : ""))
                     .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.68, green: 0.74, blue: 0.88))

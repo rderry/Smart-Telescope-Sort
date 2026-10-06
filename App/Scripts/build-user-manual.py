@@ -126,7 +126,9 @@ def build():
         src = SHOTS / f"{name}.png"
         if not src.exists():
             return
-        small = Path("/tmp") / f"sts-manual-{name}.jpg"
+        scratch = ROOT.parent / ".build-bins"
+        scratch.mkdir(exist_ok=True)
+        small = scratch / f"sts-manual-{name}.jpg"
         subprocess.run(["sips", "-s", "format", "jpeg", "-s", "formatOptions", "80", "-Z", "1600",
                         str(src), "--out", str(small)], check=True, capture_output=True)
         img = Image(str(small))
@@ -144,8 +146,8 @@ def build():
         story.append(logo)
         story.append(Spacer(1, 16))
     story.append(Paragraph("Smart Telescope Sort", s["cover_title"]))
-    story.append(Paragraph("User Manual · Version 1.1", s["cover_sub"]))
-    story.append(Paragraph("macOS · Free and open source", s["cover_sub"]))
+    story.append(Paragraph("User Manual · Version 1.2", s["cover_sub"]))
+    story.append(Paragraph("macOS 15 or newer · Apple silicon and Intel · Free and open source", s["cover_sub"]))
     story.append(
         Paragraph(
             '© 2026 <link href="https://BigSkyAstro.com" color="blue"><u>BigSkyAstro.com</u></link>',
@@ -173,20 +175,37 @@ def build():
         "<b>One brand per Captures folder.</b> The layout is detected from the folder you choose. "
         "Do not mix Seestar albums and Vaonis dated sessions in the same Captures folder.",
         "<b>You choose the file types:</b> TIFF, JPG / JPEG, FITS / FIT, or All. TIFF and FITS "
-        "are ticked by default; JPG is usually for viewing and sharing.",
+        "are checked by default; JPG is usually for viewing and sharing.",
         "<b>Apple Photos is not a source.</b> Export to a Captures folder if images "
         "only live in Photos.",
         "<b>Every brand uses the same library layout:</b> "
-        "<font face='Courier'>Targets {year}/{object}/</font> inside your Original Targets folder.",
+        "<font face='Courier'>Targets {year}/{object}/</font> inside your Target Folder.",
+        "<b>The whole Capture Folder is scanned</b>, every subfolder in one pass. Folders with no "
+        "object name are listed together so you can name them all at once.",
         "<b>Year</b> comes from dated folder names when present; otherwise from the newest "
         "image file’s modification date.",
         "<b>Object name</b> is decoded from observation / album / object folder names.",
-        "<b>Replace only when newer.</b> If Targets already has the same file name, the newer "
-        "copy wins. Identical or older copies are marked Duplicate and you are asked about them.",
+        "<b>Nothing is overwritten.</b> If Targets already holds a different file with the same "
+        "name, the new copy gets a number (<font face='Courier'>IMG_0001 2.jpg</font>). Only "
+        "byte-identical copies count as duplicates, including copies saved under a number.",
         "<b>Targets {year}</b> folders are never scanned as sources and are never removed.",
     ], s["bullet"]))
 
-    story.append(Paragraph("1.1 What the app does not do", s["h2"]))
+    story.append(Paragraph("1.1 First launch: terms and backup advice", s["h2"]))
+    story.append(
+        Paragraph(
+            "The first time the app opens it shows the assumptions, the backup advice and the "
+            "disclaimer: <i>BigSkyAstro is not responsible for the loss of data. We have built in "
+            "many safeguards to prevent it. The user accepts all liability using this freeware.</i> "
+            "Check <b>I have read and accept the above</b>, then press <b>I Understand</b>. Your "
+            "agreement is saved once, in a locked PDF on your Mac, and is never overwritten; the "
+            "next time the box is already checked and greyed out. <b>Help → Terms Acceptance Record…</b> shows when you agreed "
+            "and where the record is kept.",
+            s["body"],
+        )
+    )
+
+    story.append(Paragraph("1.2 What the app does not do", s["h2"]))
     story.append(bullets([
         "It does not stack, stretch, or post-process images.",
         "It does not support Unistellar in this version.",
@@ -195,27 +214,33 @@ def build():
     ], s["bullet"]))
 
     # 2 Folders
-    story.append(Paragraph("2. Your four folders", s["h1"]))
+    story.append(Paragraph("2. Your three folders", s["h1"]))
     story.append(
         Paragraph(
-            "The first time the app opens it asks where three library folders live. Tick "
-            "<b>Save this as default</b> to keep the choice; leave it unticked to use it for "
-            "this session only. Each folder has a <b>Change…</b> button in the main window.",
+            "The first time the app opens it asks where two library folders live. Check "
+            "<b>Save this as default</b> to keep the choice; leave it unchecked to use it for "
+            "this session only. Each folder has a <b>Change…</b> button in the main window, and "
+            "a label beside it shows <b>Default</b> or <b>This session</b>.",
             s["body"],
         )
     )
     story.append(bullets([
-        "<b>Source Captures</b> — where you copied the telescope’s sessions. Choose it with the "
-        "<b>…</b> button. The folder layout is detected each time the preview refreshes.",
-        "<b>Original Targets</b> — holds your <font face='Courier'>Targets {year}</font> folders "
-        "of sorted originals. If it is not set, Targets folders stay inside Source Captures.",
-        "<b>Processing Targets</b> — where you process objects, one folder per object (for example "
-        "<font face='Courier'>Vespera Processing</font>). The file plan shows a green check when "
-        "an object already has a processing folder.",
+        "<b>Capture Folder</b> — where the images are located. Choose it with the "
+        "<b>Choose…</b> button. The folder layout is detected each time the preview refreshes.",
+        "<b>Target Folder</b> — where you want them put: it holds your "
+        "<font face='Courier'>Targets {year}</font> folders. If it is not set, Targets folders go inside the Capture Folder.",
         "<b>Backup Storage</b> — where backups are written before a sort.",
     ], s["bullet"]))
+    story.append(
+        Paragraph(
+            "Status lights in the top right show each folder at a glance: <font color='#2a9d3a'>"
+            "<b>green</b></font> when it is selected (and, for the Capture Folder, available), "
+            "<font color='#c0392b'><b>red</b></font> until it is chosen.",
+            s["body"],
+        )
+    )
     story.append(code_block(
-        "{Original Targets}/Targets {year}/{object}/\n"
+        "{Target Folder}/Targets {year}/{object}/\n"
         "example:  …/Targets/Targets 2026/M31/\n"
         "example:  …/Targets/Targets 2026/M42/",
         s["code"],
@@ -345,18 +370,24 @@ def build():
     story.append(bullets([
         "Copy sessions off the telescope into a Captures folder.",
         "Open <b>Smart Telescope Sort</b> and answer the folder questions (first launch only).",
-        "Set <b>Source Captures</b> (…) to that folder. The layout is detected.",
-        "Pick a <b>Year</b> and <b>Month</b> (or All), and tick the <b>Files to Move</b>: "
+        "Press <b>Choose…</b> beside <b>Capture Folder</b> and pick that folder. The layout is "
+        "detected and every subfolder is scanned.",
+        "Pick a <b>Year</b> and <b>Month</b> (or All), and check the <b>Files to Move</b>: "
         "TIFF, JPG / JPEG, FITS / FIT, or All.",
+        "Under <b>OK to Delete</b>, check <b>JSON</b> and <b>Astrometry</b> if those files may be "
+        "deleted without asking (see section 7).",
         "Choose a <b>Backup</b>: Off, Zip (.zip), or Tarball (.tar.gz).",
         "Press <b>Review file plan</b> to inspect every file, its target folder and status.",
         "Press <b>Sort eligible files</b>. Name the backup, watch it run, then confirm "
         "<b>Sort now</b>.",
-        "Answer the Yes / No questions about duplicates and finished folders.",
+        "Watch the copy: each file is copied and checked (section 7). Answer the questions "
+        "about plate-solve and calibration folders.",
+        "When every move is done, say Yes twice to delete the originals, then Yes twice to "
+        "delete the processed capture folders — or No to keep them.",
         "Browse <font face='Courier'>Targets {year}/{object}</font> for stacking and archive.",
     ], s["bullet"]))
     figure("02-review-file-plan", "Review file plan lists every file grouped by capture folder, with its target "
-           "folder, processing folder and status. Nothing has moved yet.")
+           "folder and status. Nothing has moved yet.")
 
     # 6 Backups
     story.append(Paragraph("6. Backups", s["h1"]))
@@ -376,19 +407,71 @@ def build():
     ], s["bullet"]))
     figure("04-backup-progress", "A named Tarball backup running, with Cancel Backup.", width=5.6 * inch)
 
-    # 7 Clean-up prompts
-    story.append(Paragraph("7. Duplicates and finished folders", s["h1"]))
+    # 7 Sorting and clean-up
+    story.append(Paragraph("7. Sorting: copy, check, then delete", s["h1"]))
+    story.append(
+        Paragraph(
+            "Sorting never moves a file in one step. Each file is <b>copied</b> into "
+            "<font face='Courier'>Targets {year}/{object}</font>, the copy is <b>checked byte for "
+            "byte</b> against the original, and only when every move is done are you asked about "
+            "<b>deleting</b> the originals. A progress window shows the strategy, the file being "
+            "copied, how many are done and the time elapsed; <b>Stop</b> ends the copy early and "
+            "deletes nothing.",
+            s["body"],
+        )
+    )
     story.append(bullets([
-        "<b>Duplicates</b> — files already in Targets (identical or older) are marked "
-        "<i>Duplicate</i>. After the sort you are asked <b>Delete duplicates?</b> Yes moves them "
-        "to the Trash; the Targets copies are not touched. No leaves them in Captures.",
-        "<b>Emptied capture folders</b> are removed after a successful sort.",
-        "<b>Finished folders</b> — when a capture folder is sorted but still holds images of a "
-        "type you did not tick (for example JPG), you are asked <b>Delete finished folder?</b> "
+        "<b>Plate solves</b> (astrometry folders, such as Vespera’s "
+        "<font face='Courier'>01-pointing-initial</font>) are not sorted with the images. After "
+        "the copy you are asked to <b>Move to Targets</b>, <b>Leave</b> or <b>Delete</b> them. "
+        "Move puts them with their object: "
+        "<font face='Courier'>Targets {year}/{object}/Plate Solves/{session}</font>. Sessions "
+        "with no object name are listed together for you to name.",
+        "<b>Calibration folders</b> (Lights, Darks, Flats, Bias, Master…) are offered the same "
+        "way: <b>Move…</b> to a folder you choose, <b>Leave</b> or <b>Delete</b>.",
+        "<b>Delete the originals</b> — once every move is done you are asked Yes / No, then "
+        "<b>Are you sure?</b> Yes / No. No keeps them; the next scan marks them Duplicate.",
+        "<b>Delete the processed capture folders</b> — the Capture Folder is scanned again and "
+        "the app lists what is left in each processed folder (JSON, plate solves, other files). "
+        "Again you are asked Yes / No twice. A folder still holding images not in Targets yet is "
+        "never offered.",
+        "Deleted files and folders go to the Trash where the drive supports it.",
+    ], s["bullet"]))
+
+    story.append(Paragraph("7.1 Duplicates", s["h2"]))
+    story.append(bullets([
+        "<b>Duplicates</b> — files already in Targets, byte for byte, are marked "
+        "<i>Duplicate</i>, even when the Targets copy was saved under a number such as "
+        "<font face='Courier'>IMG_0001 2.jpg</font>. <b>Delete duplicates…</b> asks Yes / No; "
+        "the Targets copies are not touched.",
+        "<b>Remove Identical Copies…</b> (beside the Target Folder) finds images saved more than "
+        "once in a <font face='Courier'>Targets {year}/{object}</font> folder by earlier sorts. "
+        "It lists them by object with the space they take, asks Yes / No twice, compares each "
+        "copy byte for byte once more, and keeps one copy of each — the un-numbered one when "
+        "there is one. Files that differ, files with other names, and Plate Solves are never "
+        "touched.",
+    ], s["bullet"]))
+
+    story.append(Paragraph("7.2 JSON and astrometry files", s["h2"]))
+    story.append(bullets([
+        "Telescopes leave <font face='Courier'>.json</font> session files and plate-solve "
+        "(astrometry) files in the capture folders. Under <b>OK to Delete</b> in the main window, "
+        "check <b>JSON</b> and <b>Astrometry</b> to let the app delete folders holding them "
+        "without asking.",
+        "Unchecked (the default), a pop-up lists how many of each a folder holds, with a "
+        "checkbox for each. <b>Delete Checked</b> deletes only what you checked; <b>Keep All</b> "
+        "keeps the folders.",
+        "<b>Folders holding any other files</b> — Affinity Photo, XISF, Siril sequences, notes and "
+        "so on — are never deleted by clean-up.",
+    ], s["bullet"]))
+
+    story.append(Paragraph("7.3 Finished folders", s["h2"]))
+    story.append(bullets([
+        "When a capture folder is sorted but still holds images of a type you did not check "
+        "(for example JPG), you are asked <b>Delete finished folder?</b> "
         "<b>Yes</b> moves the folder and everything left in it to the Trash, "
-        "<b>Sort JPG / JPEG First</b> ticks that type and sorts it, and <b>No</b> leaves the "
+        "<b>Sort JPG / JPEG First</b> checks that type and sorts it, and <b>No</b> leaves the "
         "folder in Captures.",
-        "Removed folders go to the Trash where the drive supports it.",
     ], s["bullet"]))
     figure("05-finished-folder", "Delete finished folder? — Yes, sort the remaining type first, or No.",
            width=5.6 * inch)
@@ -397,11 +480,16 @@ def build():
     story.append(Paragraph("8. Safety rules", s["h1"]))
     story.append(bullets([
         "Nothing moves until you confirm the sort.",
-        "A destination file is replaced only when the source is newer.",
+        "Copy, check, then delete: an original is deleted only after its copy is checked byte "
+        "for byte and you say Yes twice.",
+        "Nothing in Targets is overwritten; a clashing name gets a number.",
         "<font face='Courier'>Targets {year}</font> is never scanned as a capture source.",
-        "The Captures folder and Targets year folders are never removed during clean-up.",
+        "The Capture Folder, the Target Folder, Backup Storage and Targets year folders are "
+        "never removed during clean-up.",
+        "Folders holding files other than images, JSON and plate solves are never deleted.",
         "Backups copy whole capture folders; they never modify Targets.",
-        "Every deletion asks Yes / No first.",
+        "Every deletion asks Yes / No first; deleting originals, processed folders and "
+        "identical copies asks twice.",
     ], s["bullet"]))
 
     # 9 Open source
@@ -411,7 +499,7 @@ def build():
             "Smart Telescope Sort is free, and its source code is on GitHub: "
             '<link href="https://github.com/rderry/Smart-Telescope-Sort" color="blue">'
             "<u>github.com/rderry/Smart-Telescope-Sort</u></link>. Open it from <b>Source code on "
-            "GitHub</b> in the sidebar or <b>Help → Source Code on GitHub</b>. The app first asks "
+            "GitHub</b> (with the GitHub logo) in the sidebar or <b>Help → Source Code on GitHub</b>. The app first asks "
             "for credit, then opens the repository when you click <b>Continue</b>.",
             s["body"],
         )

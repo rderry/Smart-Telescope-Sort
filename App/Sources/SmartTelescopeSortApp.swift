@@ -20,6 +20,12 @@ struct SmartTelescopeSortApp: App {
                     openBundledManual()
                 }
                 .keyboardShortcut("/", modifiers: [.command, .shift])
+                Button("Assumptions and Backup Advice…") {
+                    NotificationCenter.default.post(name: .showAssumptions, object: nil)
+                }
+                Button("Terms Acceptance Record…") {
+                    TermsRecordInfo.show()
+                }
                 Divider()
                 Button("Privacy Policy") {
                     NSWorkspace.shared.open(BigSkyAstroWebLinks.privacyPolicy)
@@ -59,6 +65,31 @@ struct SmartTelescopeSortApp: App {
         let fallback = URL(fileURLWithPath: "/Volumes/Large Drive/Smart Telescope Sort program/App/Resources/Smart-Telescope-Sort-User-Manual.pdf")
         if FileManager.default.fileExists(atPath: fallback.path) {
             NSWorkspace.shared.open(fallback)
+        }
+    }
+}
+
+/// Where the locked terms-acceptance PDF is, and when the terms were accepted.
+enum TermsRecordInfo {
+    @MainActor
+    static func show() {
+        let url = AgreementRecord.fileURL
+        let alert = NSAlert()
+        if let record = AgreementRecord.read() {
+            alert.messageText = "Terms accepted \(record.agreedAt)"
+            alert.informativeText = "On this Mac (\(record.macAddress)), terms version \(record.termsVersion).\n\n"
+                + "The record is a hidden, read-only, password-locked PDF:\n\(url.path)"
+            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: "Copy Path")
+        } else {
+            alert.messageText = "No terms acceptance recorded"
+            alert.informativeText = "It is saved when you check “I have read and accept the above” and click I Understand. It will be kept at:\n\(url.path)"
+            alert.addButton(withTitle: "OK")
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url.path, forType: .string)
         }
     }
 }

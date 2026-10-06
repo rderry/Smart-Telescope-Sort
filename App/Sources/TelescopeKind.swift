@@ -59,11 +59,11 @@ enum TelescopeKind: String, CaseIterable, Identifiable, Codable {
     var dropHint: String {
         switch self {
         case .vaonis:
-            return "Copy the telescope’s dated session folders into Captures."
+            return "Copy the telescope’s dated session folders into the Capture Folder."
         case .seestar:
-            return "Copy object albums into Captures and keep FIT/FITS files inside each object folder."
+            return "Copy object albums into the Capture Folder and keep FIT/FITS files inside each object folder."
         case .dwarf:
-            return "Copy session folders into Captures and keep the FITS/TIFF files inside each session."
+            return "Copy session folders into the Capture Folder and keep the FITS/TIFF files inside each session."
         case .origin:
             return "Copy raw folders named with the object and date into Captures. Turn on raw-image saving on the telescope first."
         }
@@ -71,11 +71,19 @@ enum TelescopeKind: String, CaseIterable, Identifiable, Codable {
 
     static let storageKey = "SmartTelescopeSort.telescopeKind"
 
-    /// The layout most capture folders under `root` follow, or nil when none are recognisable.
-    static func detect(in root: URL) -> TelescopeKind? {
+    /// The layout most capture folders under `root` follow, at any depth, or nil when none are recognisable.
+    /// A recognised folder is not searched further; Targets {year} folders are skipped.
+    static func detect(in root: URL, maxDepth: Int = 8) -> TelescopeKind? {
         var votes: [TelescopeKind: Int] = [:]
-        for folder in subfolders(of: root) where !folder.lastPathComponent.lowercased().hasPrefix("targets ") {
-            if let kind = guess(folder) { votes[kind, default: 0] += 1 }
+        var pending = [(folder: root, depth: 0)]
+        while let (folder, depth) = pending.popLast() {
+            for child in subfolders(of: folder) where !child.lastPathComponent.lowercased().hasPrefix("targets ") {
+                if let kind = guess(child) {
+                    votes[kind, default: 0] += 1
+                } else if depth < maxDepth {
+                    pending.append((child, depth + 1))
+                }
+            }
         }
         return votes.max { ($0.value, $1.key.rawValue) < ($1.value, $0.key.rawValue) }?.key
     }

@@ -5,21 +5,23 @@ import Foundation
 /// the App Store build is sandboxed and loses access to a plain path after relaunch.
 enum LibraryFolder: String, CaseIterable {
     case originals
-    case processing
     case backup
 
     var title: String {
         switch self {
-        case .originals: return "Original Targets"
-        case .processing: return "Processing Targets"
+        case .originals: return "Target Folder"
         case .backup: return "Backup Storage"
         }
     }
 
+    /// Shown after the title in the window, so the two main folders can't be confused.
+    var caption: String? {
+        self == .originals ? "where you want them put" : nil
+    }
+
     var question: String {
         switch self {
-        case .originals: return "Where do your original targets live?"
-        case .processing: return "Where do your Processing Targets live?"
+        case .originals: return "Where do you want the sorted images put?"
         case .backup: return "Where is your Backup Storage location?"
         }
     }
@@ -27,9 +29,7 @@ enum LibraryFolder: String, CaseIterable {
     var detail: String {
         switch self {
         case .originals:
-            return "Choose the folder that holds your Targets {year} folders of sorted originals. Sorted image files go to Targets {year}/{object} inside it."
-        case .processing:
-            return "Choose the folder where you process targets, one folder per object (for example Vespera Processing)."
+            return "Choose your Target Folder. Sorted images go into Targets {year}/{object} inside it, alongside any Targets {year} folders already there."
         case .backup:
             return "Choose where backups of your capture folders are stored before sorting (zip or tarball archives, or folder copies)."
         }
