@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+  <!--
+    Identity reserved in Partner Center (Product management > Product identity), 2026-10-09:
+      Package/Identity/Name                   BigSkyAstro.TelescopeDataSort
+      Package/Identity/Publisher              CN=6AF192BF-8D2A-4240-829A-06841CBE8558
+      Package/Properties/PublisherDisplayName BigSkyAstro
+      Package Family Name                     BigSkyAstro.TelescopeDataSort_6fthdq1z006kr
+      Store ID                                9PGPCHV4BMDN (https://apps.microsoft.com/detail/9PGPCHV4BMDN)
+  -->
+  <Identity
+    Name="BigSkyAstro.TelescopeDataSort"
+    Publisher="CN=6AF192BF-8D2A-4240-829A-06841CBE8558"
+    Version="1.2.1.0"
+    ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>Telescope Data Sort</DisplayName>
+    <PublisherDisplayName>BigSkyAstro</PublisherDisplayName>
+    <Logo>Images\StoreLogo.png</Logo>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.22000.0" MaxVersionTested="10.0.26200.0" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="en-US" />
+  </Resources>
+  <Applications>
+    <Application Id="App" Executable="SmartTelescopeSort.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Telescope Data Sort"
+        Description="Sort smart-telescope and classic telescope captures into Targets {year}\{object} folders."
+        BackgroundColor="#0A1A4A"
+        Square150x150Logo="Images\Square150x150Logo.png"
+        Square44x44Logo="Images\Square44x44Logo.png">
+        <uap:DefaultTile
+          Wide310x150Logo="Images\Wide310x150Logo.png"
+          Square71x71Logo="Images\Square71x71Logo.png"
+          ShortName="Telescope Data Sort" />
+        <uap:SplashScreen Image="Images\SplashScreen.png" BackgroundColor="#0A1A4A" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

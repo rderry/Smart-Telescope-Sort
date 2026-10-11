@@ -1,0 +1,113 @@
+<Window x:Class="SmartTelescopeSort.App.Dialogs.PlanReviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="File plan" Width="1100" Height="680" MinWidth="900" MinHeight="520"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource DialogBrush}" Foreground="{StaticResource TextBrush}"
+        FontFamily="{StaticResource AppFont}" FontSize="13" UseLayoutRounding="True">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <DockPanel>
+            <Button DockPanel.Dock="Right" Content="Done" IsDefault="True" IsCancel="True" Style="{StaticResource ProminentButton}"
+                    MinWidth="88" VerticalAlignment="Top" Click="Done_Click" />
+            <StackPanel>
+                <TextBlock Text="File plan" FontSize="22" FontWeight="Bold" />
+                <TextBlock x:Name="LayoutText" Foreground="{StaticResource LabelBrush}" Margin="0,2,0,0" />
+            </StackPanel>
+        </DockPanel>
+
+        <TextBlock x:Name="SummaryText" Grid.Row="1" Foreground="{StaticResource SubtitleBrush}" Margin="0,10,0,10" TextWrapping="Wrap" />
+
+        <Grid Grid.Row="2">
+            <TextBlock x:Name="EmptyText" Visibility="Collapsed" Margin="0,24,0,0"
+                       Text="No file actions in this preview. Check the Capture Folder path and file types." />
+            <DataGrid x:Name="Plan" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
+                      CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Extended" MinHeight="300"
+                      VirtualizingPanel.IsVirtualizingWhenGrouping="True" EnableRowVirtualization="True">
+                <DataGrid.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate>
+                                <DockPanel Background="#E4E9F5" Margin="0,4,0,0">
+                                    <TextBlock DockPanel.Dock="Right" Text="{Binding Items, Converter={StaticResource GroupStatus}}"
+                                               FontSize="11" Foreground="{StaticResource TableInkBrush}" Margin="8,4" />
+                                    <TextBlock Text="&#xE8B7;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource AccentBrush}"
+                                               Margin="8,4,6,4" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Name}" FontFamily="{StaticResource MonoFont}" FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TableInkBrush}" VerticalAlignment="Center" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </DataGrid.GroupStyle>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="DSO / name" Binding="{Binding Object}" Width="140">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="Image file" Width="2*" MinWidth="170">
+                        <DataGridTemplateColumn.CellStyle>
+                            <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding FileName}" />
+                            </Style>
+                        </DataGridTemplateColumn.CellStyle>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding FileName}" ToolTip="{Binding Source}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                           TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Date" Binding="{Binding DateText}" Width="130" FontFamily="{StaticResource MonoFont}" FontSize="11" />
+                    <DataGridTemplateColumn Header="Target folder" Width="2*" MinWidth="180">
+                        <DataGridTemplateColumn.CellStyle>
+                            <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding TargetFolder}" />
+                            </Style>
+                        </DataGridTemplateColumn.CellStyle>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding TargetFolder}" ToolTip="{Binding Destination}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                           FontWeight="SemiBold" Foreground="{StaticResource TableDestinationBrush}" TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="Status" Width="100">
+                        <DataGridTemplateColumn.CellStyle>
+                            <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding ActionLabel}" />
+                            </Style>
+                        </DataGridTemplateColumn.CellStyle>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock x:Name="Status" Text="{Binding ActionLabel}" FontSize="11" FontWeight="Bold" Foreground="#1E8A3C" />
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsDuplicate}" Value="True">
+                                        <Setter TargetName="Status" Property="Foreground" Value="#C26A00" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+
+        <DockPanel x:Name="DuplicateBar" Grid.Row="3" Margin="0,12,0,0" Visibility="Collapsed">
+            <Button x:Name="DeleteDuplicatesButton" DockPanel.Dock="Right" Content="Delete duplicates…" Style="{StaticResource BorderedButton}"
+                    Click="DeleteDuplicates_Click" />
+            <TextBlock Text="&#xE8C8;" FontFamily="{StaticResource IconFont}" Foreground="{StaticResource OrangeBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBlock x:Name="DuplicateText" VerticalAlignment="Center" TextWrapping="Wrap" />
+        </DockPanel>
+    </Grid>
+</Window>

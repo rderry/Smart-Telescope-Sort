@@ -21,10 +21,10 @@ enum TelescopeKind: String, CaseIterable, Identifiable, Codable {
     /// Finder name. No manufacturer or model names.
     var editionName: String {
         switch self {
-        case .vaonis: return "Smart Telescope Sort — Dated Sessions"
-        case .seestar: return "Smart Telescope Sort — Object Albums"
-        case .dwarf: return "Smart Telescope Sort — Session Files"
-        case .origin: return "Smart Telescope Sort — Object Date Folders"
+        case .vaonis: return "Telescope Data Sort — Dated Sessions"
+        case .seestar: return "Telescope Data Sort — Object Albums"
+        case .dwarf: return "Telescope Data Sort — Session Files"
+        case .origin: return "Telescope Data Sort — Object Date Folders"
         }
     }
 
@@ -51,7 +51,19 @@ enum TelescopeKind: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Bold at the top of the main window and on page 1 of the manual. Same wording on Windows.
+    static let untestedNotice = "This has not been tested with other telescopes, but there is no reason it will not work with almost any data that it supports!"
+
     static let notAffiliated = "Telescope names identify folder layouts only. This app is not affiliated with or created by those manufacturers."
+
+    /// Shown when no smart-telescope layout is found. Every layout is sorted the same way, so these images still sort.
+    static let otherLayoutTitle = "Folders from any telescope or camera"
+
+    static let otherCompatibilityNote = "No smart-telescope layout found. Images from any telescope or camera, including classic setups, "
+        + "are sorted by the object their folders name, such as M31/ or NGC 7000/. Independent app. Not affiliated with telescope makers."
+
+    static let otherDropHint = "Copy smart-telescope sessions into the Capture Folder as they are. From any other telescope or camera, "
+        + "put the TIFF or FITS files in a folder named for the object, such as M31/."
 
     var menuTitle: String { layoutTitle }
 

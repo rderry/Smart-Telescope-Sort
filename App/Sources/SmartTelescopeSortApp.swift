@@ -4,7 +4,7 @@ import AppKit
 @main
 struct SmartTelescopeSortApp: App {
     private var windowTitle: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Smart Telescope Sort"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Telescope Data Sort"
     }
 
     var body: some Scene {
@@ -15,8 +15,13 @@ struct SmartTelescopeSortApp: App {
         .defaultSize(width: 1240, height: 900)
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Credits") {
+                    NotificationCenter.default.post(name: .showCredits, object: nil)
+                }
+            }
             CommandGroup(replacing: .help) {
-                Button("Smart Telescope Sort User Manual") {
+                Button("Telescope Data Sort User Manual") {
                     openBundledManual()
                 }
                 .keyboardShortcut("/", modifiers: [.command, .shift])
@@ -26,11 +31,14 @@ struct SmartTelescopeSortApp: App {
                 Button("Terms Acceptance Record…") {
                     TermsRecordInfo.show()
                 }
+                Button("Credits") {
+                    NotificationCenter.default.post(name: .showCredits, object: nil)
+                }
                 Divider()
                 Button("Privacy Policy") {
                     NSWorkspace.shared.open(BigSkyAstroWebLinks.privacyPolicy)
                 }
-                Button("Smart Telescope Sort on the Web") {
+                Button("Telescope Data Sort on the Web") {
                     NSWorkspace.shared.open(BigSkyAstroWebLinks.appPage)
                 }
                 Button("Astronomy Observation Planner") {
@@ -58,11 +66,11 @@ struct SmartTelescopeSortApp: App {
     }
 
     private func openBundledManual() {
-        if let url = Bundle.main.url(forResource: "Smart-Telescope-Sort-User-Manual", withExtension: "pdf") {
+        if let url = Bundle.main.url(forResource: "Telescope-Data-Sort-User-Manual", withExtension: "pdf") {
             NSWorkspace.shared.open(url)
             return
         }
-        let fallback = URL(fileURLWithPath: "/Volumes/Large Drive/Smart Telescope Sort program/App/Resources/Smart-Telescope-Sort-User-Manual.pdf")
+        let fallback = URL(fileURLWithPath: "/Volumes/Large Drive/Smart Telescope Sort program/App/Resources/Telescope-Data-Sort-User-Manual.pdf")
         if FileManager.default.fileExists(atPath: fallback.path) {
             NSWorkspace.shared.open(fallback)
         }
@@ -99,12 +107,14 @@ enum SourceCodeCredit {
     @MainActor
     static func openRepository() {
         let alert = NSAlert()
-        alert.messageText = "Smart Telescope Sort is open source"
+        alert.messageText = "Telescope Data Sort is open source"
         alert.informativeText = """
             If you change it and give it away, please give credit to BigSkyAstro: \
             include the BigSkyAstro logo and a link to bigskyastro.com.
 
             Credit line: "Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com"
+
+            The GitHub project keeps the app's earlier name, Smart Telescope Sort.
             """
         alert.accessoryView = accessory()
         alert.addButton(withTitle: "Continue")

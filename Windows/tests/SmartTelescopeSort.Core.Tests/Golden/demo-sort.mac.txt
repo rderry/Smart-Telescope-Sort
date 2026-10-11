@@ -1,0 +1,124 @@
+copied DWARF/2026-09-09_dwarf_ftp_copy/NGC6888/light_001.fits|Targets 2026/NGC6888/light_001.fits
+copied DWARF/2026-09-09_dwarf_ftp_copy/NGC6888/master.fits|Targets 2026/NGC6888/master.fits
+copied DWARF/2026-09-09_dwarf_ftp_copy/NGC6888/master.tiff|Targets 2026/NGC6888/master.tiff
+copied DWARF/20260907_DWARF3_session/M33/stacked.fits|Targets 2026/M33/stacked.fits
+copied DWARF/20260907_DWARF3_session/M33/stacked.tiff|Targets 2026/M33/stacked.tiff
+copied DWARF/20260907_DWARF3_session/M33/sub_0001.fits|Targets 2026/M33/sub_0001.fits
+copied DWARF/20260907_DWARF3_session/M33/sub_0002.fits|Targets 2026/M33/sub_0002.fits
+copied DWARF/20260920_DWARFmini_wide/RhoOphiuchi/astro_001.fits|Targets 2026/RHOOPHIUCHI/astro_001.fits
+copied DWARF/20260920_DWARFmini_wide/RhoOphiuchi/astro_002.fits|Targets 2026/RHOOPHIUCHI/astro_002.fits
+copied DWARF/20260920_DWARFmini_wide/RhoOphiuchi/astro_stacked.tiff|Targets 2026/RHOOPHIUCHI/astro_stacked.tiff
+copied DWARF/DWARF_II_USB_20260913/M81/stack.fits|Targets 2026/M81/stack.fits
+copied DWARF/DWARF_II_USB_20260913/M81/stack.tiff|Targets 2026/M81/stack.tiff
+copied DWARF/DWARF_II_USB_20260913/M82/stack.fits|Targets 2026/M82/stack.fits
+copied Origin/M31_2026-09-05/master_stacked.fits|Targets 2026/M31/master_stacked.fits
+copied Origin/M31_2026-09-05/raw_0001.fits|Targets 2026/M31/raw_0001.fits
+copied Origin/M31_2026-09-05/raw_0002.fits|Targets 2026/M31/raw_0002.fits
+copied Origin/M31_2026-09-05/raw_0003.fits|Targets 2026/M31/raw_0003.fits
+copied Origin/M51_2026-09-16/raw_0001.fits|Targets 2026/M51/raw_0001.fits
+copied Origin/M51_2026-09-16/raw_0002.fits|Targets 2026/M51/raw_0002.fits
+copied Origin/M51_2026-09-16/raw_0003.fits|Targets 2026/M51/raw_0003.fits
+copied Origin/NGC7000_2026-09-08/dark.fits|Targets 2026/NGC7000/dark.fits
+copied Origin/NGC7000_2026-09-08/flat.fits|Targets 2026/NGC7000/flat.fits
+copied Origin/NGC7000_2026-09-08/raw_0001.fits|Targets 2026/NGC7000/raw_0001.fits
+copied Origin/NGC7000_2026-09-08/raw_0002.fits|Targets 2026/NGC7000/raw_0002.fits
+copied Origin/Origin_USB_Dump_2026-09-19/M27_2026-09-19/raw_0001.fits|Targets 2026/M27/raw_0001.fits
+copied Origin/Origin_USB_Dump_2026-09-19/M27_2026-09-19/raw_0002.fits|Targets 2026/M27/raw_0002.fits
+copied Origin/Origin_USB_Dump_2026-09-19/NGC7331_2026-09-19/raw_0001.fits|Targets 2026/NGC7331/raw_0001.fits
+copied Origin/Origin_USB_Dump_2026-09-19/NGC7331_2026-09-19/raw_0002.fits|Targets 2026/NGC7331/raw_0002.fits
+copied Seestar/20260915_Seestar_S50/IC1396/sub_0001.fit|Targets 2026/IC1396/sub_0001.fit
+copied Seestar/20260915_Seestar_S50/IC1396/sub_0002.fit|Targets 2026/IC1396/sub_0002.fit
+copied Seestar/20260915_Seestar_S50/IC1396/sub_0003.fits|Targets 2026/IC1396/sub_0003.fits
+copied Seestar/M45/seestar_m45_001.fit|Targets 2026/M45/seestar_m45_001.fit
+copied Seestar/M45/seestar_m45_002.fit|Targets 2026/M45/seestar_m45_002.fit
+copied Seestar/Seestar_USB_2026-09-08/M31/ss_m31_001.fit|Targets 2026/M31/ss_m31_001.fit
+copied Seestar/Seestar_USB_2026-09-08/M31/ss_m31_002.fit|Targets 2026/M31/ss_m31_002.fit
+copied Seestar/Seestar_USB_2026-09-08/NGC253/ss_n253_001.fits|Targets 2026/NGC253/ss_n253_001.fits
+copied Seestar/Seestar_USB_2026-09-08/NGC253/ss_n253_stacked.fit|Targets 2026/NGC253/ss_n253_stacked.fit
+copied Seestar/Seestar_WiFi_2026-09-11/M42/frame_01.fit|Targets 2026/M42/frame_01.fit
+copied Seestar/Seestar_WiFi_2026-09-11/M42/frame_02.fit|Targets 2026/M42/frame_02.fit
+copied Seestar/Seestar_WiFi_2026-09-11/NGC891/frame_01.fits|Targets 2026/NGC891/frame_01.fits
+copied Vaonis/2026-09-10_22-15-03_observation_M31/01-images-initial/img-0001.tiff|Targets 2026/M31/img-0001.tiff
+copied Vaonis/2026-09-10_22-15-03_observation_M31/01-images-initial/img-0002.tiff|Targets 2026/M31/img-0002.tiff
+copied Vaonis/2026-09-10_22-15-03_observation_M31/01-images-initial/img-0003.fits|Targets 2026/M31/img-0003.fits
+copied Vaonis/2026-09-12_01-40-22_observation_NGC7023/01-images-initial/img-0001.tiff|Targets 2026/NGC7023/img-0001.tiff
+copied Vaonis/2026-09-12_01-40-22_observation_NGC7023/02-images-processed/img-0008.tiff|Targets 2026/NGC7023/img-0008.tiff
+copied Vaonis/2026-09-12_01-40-22_observation_NGC7023/02-images-processed/img-0009.fits|Targets 2026/NGC7023/img-0009.fits
+copied Vaonis/2026-09-14_07-20-55_plan_Demo_Night/01-observation-ngc7000/01-images-initial/img-0001.tiff|Targets 2026/NGC7000/img-0001.tiff
+copied Vaonis/2026-09-14_07-20-55_plan_Demo_Night/02-observation-ngc7000/01-images-initial/img-0010.tiff|Targets 2026/NGC7000/img-0010.tiff
+copied Vaonis/2026-09-14_07-20-55_plan_Demo_Night/03-observation-m27/01-images-initial/img-0001.fits|Targets 2026/M27/img-0001.fits
+copied Vaonis/2026-09-18_23-05-11_observation_M31/01-images-initial/img-0100.tiff|Targets 2026/M31/img-0100.tiff
+copied Vaonis/2026-09-18_23-05-11_observation_M31/01-images-initial/img-0101.tiff|Targets 2026/M31/img-0101.tiff
+entry DWARF/2026-09-09_dwarf_ftp_copy/NGC6888|2026|09|NGC6888|2026-09-09|1|3|FITS,TIFF|false
+entry DWARF/20260907_DWARF3_session/M33|2026|09|M33|2026-09-07|1|4|FITS,TIFF|false
+entry DWARF/20260920_DWARFmini_wide/RhoOphiuchi|2026|09|RHOOPHIUCHI|2026-09-20|1|3|FITS,TIFF|true
+entry DWARF/DWARF_II_USB_20260913/M81|2026|09|M81|2026-09-21|1|2|FITS,TIFF|false
+entry DWARF/DWARF_II_USB_20260913/M82|2026|09|M82|2026-09-21|1|1|FITS|false
+entry Origin/M31_2026-09-05|2026|09|M31|2026-09-05|1|4|FITS|false
+entry Origin/M51_2026-09-16|2026|09|M51|2026-09-16|1|3|FITS|false
+entry Origin/NGC7000_2026-09-08|2026|09|NGC7000|2026-09-08|1|4|FITS|false
+entry Origin/Origin_USB_Dump_2026-09-19/M27_2026-09-19|2026|09|M27|2026-09-19|1|2|FITS|false
+entry Origin/Origin_USB_Dump_2026-09-19/NGC7331_2026-09-19|2026|09|NGC7331|2026-09-19|1|2|FITS|false
+entry Seestar/20260915_Seestar_S50/IC1396|2026|09|IC1396|2026-09-15|1|3|FIT,FITS|false
+entry Seestar/M45|2026|09|M45|2026-09-21|1|2|FIT|false
+entry Seestar/Seestar_USB_2026-09-08/M31|2026|09|M31|2026-09-08|1|2|FIT|false
+entry Seestar/Seestar_USB_2026-09-08/NGC253|2026|09|NGC253|2026-09-08|1|2|FIT,FITS|false
+entry Seestar/Seestar_WiFi_2026-09-11/M42|2026|09|M42|2026-09-11|1|2|FIT|false
+entry Seestar/Seestar_WiFi_2026-09-11/NGC891|2026|09|NGC891|2026-09-11|1|1|FITS|false
+entry Vaonis/2026-09-10_22-15-03_observation_M31|2026|09|M31|2026-09-10_22-15-03|1|3|FITS,TIFF|false
+entry Vaonis/2026-09-12_01-40-22_observation_NGC7023|2026|09|NGC7023|2026-09-12_01-40-22|2|3|FITS,TIFF|false
+entry Vaonis/2026-09-14_07-20-55_plan_Demo_Night|2026|09|M27|2026-09-14_07-20-55|1|1|FITS|false
+entry Vaonis/2026-09-14_07-20-55_plan_Demo_Night|2026|09|NGC7000|2026-09-14_07-20-55|2|2|TIFF|false
+entry Vaonis/2026-09-18_23-05-11_observation_M31|2026|09|M31|2026-09-18_23-05-11|1|2|TIFF|false
+layout vaonis
+plan DWARF/2026-09-09_dwarf_ftp_copy/NGC6888/light_001.fits|Targets 2026/NGC6888/light_001.fits|move
+plan DWARF/2026-09-09_dwarf_ftp_copy/NGC6888/master.fits|Targets 2026/NGC6888/master.fits|move
+plan DWARF/2026-09-09_dwarf_ftp_copy/NGC6888/master.tiff|Targets 2026/NGC6888/master.tiff|move
+plan DWARF/20260907_DWARF3_session/M33/stacked.fits|Targets 2026/M33/stacked.fits|move
+plan DWARF/20260907_DWARF3_session/M33/stacked.tiff|Targets 2026/M33/stacked.tiff|move
+plan DWARF/20260907_DWARF3_session/M33/sub_0001.fits|Targets 2026/M33/sub_0001.fits|move
+plan DWARF/20260907_DWARF3_session/M33/sub_0002.fits|Targets 2026/M33/sub_0002.fits|move
+plan DWARF/20260920_DWARFmini_wide/RhoOphiuchi/astro_001.fits|Targets 2026/RHOOPHIUCHI/astro_001.fits|move
+plan DWARF/20260920_DWARFmini_wide/RhoOphiuchi/astro_002.fits|Targets 2026/RHOOPHIUCHI/astro_002.fits|move
+plan DWARF/20260920_DWARFmini_wide/RhoOphiuchi/astro_stacked.tiff|Targets 2026/RHOOPHIUCHI/astro_stacked.tiff|move
+plan DWARF/DWARF_II_USB_20260913/M81/stack.fits|Targets 2026/M81/stack.fits|move
+plan DWARF/DWARF_II_USB_20260913/M81/stack.tiff|Targets 2026/M81/stack.tiff|move
+plan DWARF/DWARF_II_USB_20260913/M82/stack.fits|Targets 2026/M82/stack.fits|move
+plan Origin/M31_2026-09-05/master_stacked.fits|Targets 2026/M31/master_stacked.fits|move
+plan Origin/M31_2026-09-05/raw_0001.fits|Targets 2026/M31/raw_0001.fits|move
+plan Origin/M31_2026-09-05/raw_0002.fits|Targets 2026/M31/raw_0002.fits|move
+plan Origin/M31_2026-09-05/raw_0003.fits|Targets 2026/M31/raw_0003.fits|move
+plan Origin/M51_2026-09-16/raw_0001.fits|Targets 2026/M51/raw_0001.fits|move
+plan Origin/M51_2026-09-16/raw_0002.fits|Targets 2026/M51/raw_0002.fits|move
+plan Origin/M51_2026-09-16/raw_0003.fits|Targets 2026/M51/raw_0003.fits|move
+plan Origin/NGC7000_2026-09-08/dark.fits|Targets 2026/NGC7000/dark.fits|move
+plan Origin/NGC7000_2026-09-08/flat.fits|Targets 2026/NGC7000/flat.fits|move
+plan Origin/NGC7000_2026-09-08/raw_0001.fits|Targets 2026/NGC7000/raw_0001.fits|move
+plan Origin/NGC7000_2026-09-08/raw_0002.fits|Targets 2026/NGC7000/raw_0002.fits|move
+plan Origin/Origin_USB_Dump_2026-09-19/M27_2026-09-19/raw_0001.fits|Targets 2026/M27/raw_0001.fits|move
+plan Origin/Origin_USB_Dump_2026-09-19/M27_2026-09-19/raw_0002.fits|Targets 2026/M27/raw_0002.fits|move
+plan Origin/Origin_USB_Dump_2026-09-19/NGC7331_2026-09-19/raw_0001.fits|Targets 2026/NGC7331/raw_0001.fits|move
+plan Origin/Origin_USB_Dump_2026-09-19/NGC7331_2026-09-19/raw_0002.fits|Targets 2026/NGC7331/raw_0002.fits|move
+plan Seestar/20260915_Seestar_S50/IC1396/sub_0001.fit|Targets 2026/IC1396/sub_0001.fit|move
+plan Seestar/20260915_Seestar_S50/IC1396/sub_0002.fit|Targets 2026/IC1396/sub_0002.fit|move
+plan Seestar/20260915_Seestar_S50/IC1396/sub_0003.fits|Targets 2026/IC1396/sub_0003.fits|move
+plan Seestar/M45/seestar_m45_001.fit|Targets 2026/M45/seestar_m45_001.fit|move
+plan Seestar/M45/seestar_m45_002.fit|Targets 2026/M45/seestar_m45_002.fit|move
+plan Seestar/Seestar_USB_2026-09-08/M31/ss_m31_001.fit|Targets 2026/M31/ss_m31_001.fit|move
+plan Seestar/Seestar_USB_2026-09-08/M31/ss_m31_002.fit|Targets 2026/M31/ss_m31_002.fit|move
+plan Seestar/Seestar_USB_2026-09-08/NGC253/ss_n253_001.fits|Targets 2026/NGC253/ss_n253_001.fits|move
+plan Seestar/Seestar_USB_2026-09-08/NGC253/ss_n253_stacked.fit|Targets 2026/NGC253/ss_n253_stacked.fit|move
+plan Seestar/Seestar_WiFi_2026-09-11/M42/frame_01.fit|Targets 2026/M42/frame_01.fit|move
+plan Seestar/Seestar_WiFi_2026-09-11/M42/frame_02.fit|Targets 2026/M42/frame_02.fit|move
+plan Seestar/Seestar_WiFi_2026-09-11/NGC891/frame_01.fits|Targets 2026/NGC891/frame_01.fits|move
+plan Vaonis/2026-09-10_22-15-03_observation_M31/01-images-initial/img-0001.tiff|Targets 2026/M31/img-0001.tiff|move
+plan Vaonis/2026-09-10_22-15-03_observation_M31/01-images-initial/img-0002.tiff|Targets 2026/M31/img-0002.tiff|move
+plan Vaonis/2026-09-10_22-15-03_observation_M31/01-images-initial/img-0003.fits|Targets 2026/M31/img-0003.fits|move
+plan Vaonis/2026-09-12_01-40-22_observation_NGC7023/01-images-initial/img-0001.tiff|Targets 2026/NGC7023/img-0001.tiff|move
+plan Vaonis/2026-09-12_01-40-22_observation_NGC7023/02-images-processed/img-0008.tiff|Targets 2026/NGC7023/img-0008.tiff|move
+plan Vaonis/2026-09-12_01-40-22_observation_NGC7023/02-images-processed/img-0009.fits|Targets 2026/NGC7023/img-0009.fits|move
+plan Vaonis/2026-09-14_07-20-55_plan_Demo_Night/01-observation-ngc7000/01-images-initial/img-0001.tiff|Targets 2026/NGC7000/img-0001.tiff|move
+plan Vaonis/2026-09-14_07-20-55_plan_Demo_Night/02-observation-ngc7000/01-images-initial/img-0010.tiff|Targets 2026/NGC7000/img-0010.tiff|move
+plan Vaonis/2026-09-14_07-20-55_plan_Demo_Night/03-observation-m27/01-images-initial/img-0001.fits|Targets 2026/M27/img-0001.fits|move
+plan Vaonis/2026-09-18_23-05-11_observation_M31/01-images-initial/img-0100.tiff|Targets 2026/M31/img-0100.tiff|move
+plan Vaonis/2026-09-18_23-05-11_observation_M31/01-images-initial/img-0101.tiff|Targets 2026/M31/img-0101.tiff|move

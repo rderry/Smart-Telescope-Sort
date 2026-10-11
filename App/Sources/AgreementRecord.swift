@@ -8,7 +8,7 @@ import IOKit
 /// ~/Library/Containers/com.derry.SmartTelescopeSort/Data/ for the sandboxed App Store build.
 enum AgreementRecord {
     /// Written into the record so it shows which wording was accepted.
-    static let termsVersion = "2026-10-04"
+    static let termsVersion = "2026-10-08"
     static let password = "MontanaSky"
 
     struct Contents {
@@ -98,9 +98,9 @@ enum AgreementRecord {
             "appVersion=\(contents.appVersion)",
         ].joined(separator: "; ")
         let options: [CFString: Any] = [
-            kCGPDFContextTitle: "Smart Telescope Sort — Terms Acceptance",
+            kCGPDFContextTitle: "Telescope Data Sort — Terms Acceptance",
             kCGPDFContextAuthor: "Big Sky Astro",
-            kCGPDFContextCreator: "Smart Telescope Sort \(contents.appVersion)",
+            kCGPDFContextCreator: "Telescope Data Sort \(contents.appVersion)",
             kCGPDFContextSubject: "Terms accepted \(contents.agreedAt)",
             kCGPDFContextKeywords: keywords,
             kCGPDFContextUserPassword: password,
@@ -123,7 +123,7 @@ enum AgreementRecord {
             style.paragraphSpacing = after
             text.append(NSAttributedString(string: string + "\n", attributes: [.font: font, .paragraphStyle: style]))
         }
-        add("Smart Telescope Sort — Terms Acceptance", .boldSystemFont(ofSize: 18), after: 14)
+        add("Telescope Data Sort — Terms Acceptance", .boldSystemFont(ofSize: 18), after: 14)
         add("Accepted: \(shown.string(from: date))  (\(contents.agreedAt))", .systemFont(ofSize: 12))
         add("Mac address: \(contents.macAddress)", .systemFont(ofSize: 12))
         add("App version: \(contents.appVersion)    Terms version: \(contents.termsVersion)", .systemFont(ofSize: 12), after: 14)

@@ -1,0 +1,435 @@
+<Window x:Class="SmartTelescopeSort.App.Shell.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sorting="clr-namespace:SmartTelescopeSort.Core.Sorting;assembly=SmartTelescopeSort.Core"
+        Title="Telescope Data Sort" Width="1240" Height="900" MinWidth="1000" MinHeight="760"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource WindowBrush}" Foreground="{StaticResource TextBrush}"
+        FontFamily="{StaticResource AppFont}" FontSize="13" UseLayoutRounding="True">
+    <Grid x:Name="RootGrid" Background="{StaticResource WindowBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Menu x:Name="MainMenu">
+            <MenuItem Header="_File">
+                <MenuItem Header="Choose Capture _Folder…" InputGestureText="Ctrl+O" Click="ChooseCapture_Click" />
+                <MenuItem Header="Change _Target Folder…" Click="ChangeTarget_Click" />
+                <MenuItem Header="Change _Backup Storage…" Click="ChangeBackup_Click" />
+                <Separator />
+                <MenuItem Header="_Refresh preview" InputGestureText="F5" Click="Refresh_Click" />
+                <MenuItem Header="Review file _plan" Click="Review_Click" />
+                <MenuItem Header="Remove _Identical Copies in Targets…" Click="RemoveCopies_Click" />
+                <Separator />
+                <MenuItem Header="E_xit" InputGestureText="Alt+F4" Click="Exit_Click" />
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="Telescope Data Sort User _Manual (PDF)" InputGestureText="F1" Click="ManualPdf_Click" />
+                <MenuItem Header="User Manual (in this _window)" Click="ManualInApp_Click" />
+                <MenuItem Header="_Assumptions and Backup Advice…" Click="Assumptions_Click" />
+                <MenuItem Header="_Terms Acceptance Record…" Click="TermsRecord_Click" />
+                <MenuItem Header="_Credits" Click="Credits_Click" />
+                <Separator />
+                <MenuItem Header="Privacy Policy" Click="Privacy_Click" />
+                <MenuItem Header="Telescope Data Sort on the Web" Click="AppPage_Click" />
+                <MenuItem Header="Astronomy Observation Planner" Click="ObservationPlanner_Click" />
+                <MenuItem Header="Smart Telescope Planner" Click="TelescopePlanner_Click" />
+                <MenuItem Header="Source Code on GitHub (Open Source)" Click="SourceCode_Click" />
+                <MenuItem x:Name="ArchiverMenu" Header="Free Zip &amp; Tarball Apps" />
+                <MenuItem Header="Contact Support" Click="SupportEmail_Click" />
+                <MenuItem Header="Support (online)" Click="Support_Click" />
+                <Separator />
+                <MenuItem Header="_About Telescope Data Sort" Click="About_Click" />
+            </MenuItem>
+        </Menu>
+
+        <Border Grid.Row="1" Background="{StaticResource UntestedNoticeBrush}" Padding="16,8">
+            <TextBlock x:Name="UntestedNotice" Text="{x:Static sorting:TelescopeKinds.UntestedNotice}"
+                       FontWeight="Bold" FontSize="14" Foreground="{StaticResource UntestedNoticeTextBrush}"
+                       TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center"
+                       AutomationProperties.AutomationId="UntestedNotice" />
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="290" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Sidebar -->
+            <DockPanel Background="{StaticResource SidebarBrush}">
+                <StackPanel DockPanel.Dock="Top" Margin="20,16,20,0">
+                    <Button x:Name="LogoButton" Style="{StaticResource LinkButton}" HorizontalAlignment="Center" Margin="0,4,0,8"
+                            ToolTip="Open bigskyastro.com" Click="Home_Click" Cursor="Hand">
+                        <Border Width="250" Height="104" CornerRadius="10">
+                            <Border.Background>
+                                <ImageBrush ImageSource="/Assets/BigSkyAstro-logo.png" Stretch="Uniform" />
+                            </Border.Background>
+                        </Border>
+                    </Button>
+                    <TextBlock Text="Telescope Data Sort" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" />
+                    <TextBlock Text="Smart &amp; classic telescopes → Targets" FontSize="11" Foreground="{StaticResource SubtitleBrush}"
+                               HorizontalAlignment="Center" Margin="0,3,0,12" />
+
+                    <Border Background="{StaticResource HowItWorksCardBrush}" CornerRadius="12" Padding="12">
+                        <StackPanel>
+                            <TextBlock Text="HOW IT WORKS" Style="{StaticResource HeavyLabel}" HorizontalAlignment="Center" Margin="0,0,0,10" />
+                            <ItemsControl x:Name="HowItWorks">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="26" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Icon}" Style="{StaticResource Icon}" Foreground="{StaticResource LinkBrush}" FontSize="13" Margin="0,1,0,0" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Text}" FontSize="11" Foreground="{StaticResource InfoBrush}" TextWrapping="Wrap" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Bottom" Margin="20,8,20,16">
+                    <Button Style="{StaticResource LinkButton}" Click="ManualPdf_Click" HorizontalAlignment="Left" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE82D;" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                            <TextBlock Text="Open user manual (PDF)" FontSize="11" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource LinkButton}" Click="Credits_Click" HorizontalAlignment="Left" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE716;" Style="{StaticResource Icon}" Margin="0,0,8,0" />
+                            <TextBlock Text="Credits" FontSize="11" FontWeight="Bold" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource LinkButton}" Click="SourceCode_Click" HorizontalAlignment="Left" Margin="0,0,0,10"
+                            ToolTip="https://github.com/rderry/Smart-Telescope-Sort">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Source="/Assets/GitHub-logo.png" Width="14" Height="14" Margin="0,0,8,0" />
+                            <TextBlock Text="Source code on GitHub" FontSize="11" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource LinkButton}" Click="ObservationPlanner_Click" Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch" ToolTip="https://apps.apple.com/app/id6764166535">
+                        <Border Background="{StaticResource AppCardBrush}" CornerRadius="10" Padding="8,7" BorderBrush="#2EFFFFFF" BorderThickness="1">
+                            <DockPanel>
+                                <Border Width="26" Height="26" CornerRadius="7" Background="#2EFFFFFF" Margin="0,0,10,0">
+                                    <TextBlock Text="&#xE7F4;" Style="{StaticResource Icon}" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock DockPanel.Dock="Right" Text="&#xE8A7;" Style="{StaticResource Icon}" Foreground="#D9FFFFFF" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Astronomy Observation Planner" FontSize="11.5" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="Mac App Store" FontSize="10" Foreground="#C7FFFFFF" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </Button>
+                    <Button Style="{StaticResource LinkButton}" Click="TelescopePlanner_Click" Margin="0,0,0,10" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch" ToolTip="https://apps.apple.com/app/id6768153445">
+                        <Border Background="{StaticResource AppCardBrush}" CornerRadius="10" Padding="8,7" BorderBrush="#2EFFFFFF" BorderThickness="1">
+                            <DockPanel>
+                                <Border Width="26" Height="26" CornerRadius="7" Background="#2EFFFFFF" Margin="0,0,10,0">
+                                    <TextBlock Text="&#xE8EA;" Style="{StaticResource Icon}" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <TextBlock DockPanel.Dock="Right" Text="&#xE8A7;" Style="{StaticResource Icon}" Foreground="#D9FFFFFF" VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Smart Telescope Planner" FontSize="11.5" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="iPhone &amp; iPad App Store" FontSize="10" Foreground="#C7FFFFFF" />
+                                </StackPanel>
+                            </DockPanel>
+                        </Border>
+                    </Button>
+                    <TextBlock Text="Nothing moves until you press Sort eligible files." FontSize="10" Foreground="{StaticResource SubtitleBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <Border />
+            </DockPanel>
+
+            <!-- Workspace -->
+            <Grid Grid.Column="1" Background="{StaticResource WorkspaceBrush}">
+                <Grid Margin="24,18,24,12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" MinHeight="150" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Header and status lights -->
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                            <ContentControl Content="{Binding CaptureLight}" ContentTemplate="{StaticResource StatusLightTemplate}" />
+                            <ContentControl Content="{Binding TargetFolderLight}" ContentTemplate="{StaticResource StatusLightTemplate}" />
+                            <ContentControl Content="{Binding BackupFolderLight}" ContentTemplate="{StaticResource StatusLightTemplate}" />
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="CAPTURE LIBRARY" Style="{StaticResource HeavyLabel}" />
+                            <TextBlock Text="Ready to review" FontSize="24" FontWeight="Bold" Margin="0,2,0,2" />
+                            <TextBlock Text="{Binding LayoutHeading}" ToolTip="{Binding LayoutNote}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource LinkBrush}" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!-- Capture Folder -->
+                    <DockPanel Grid.Row="1" Margin="0,12,0,4">
+                        <TextBlock DockPanel.Dock="Left" Text="&#xE8B7;" Style="{StaticResource Icon}" Foreground="{StaticResource FolderIconBrush}" FontSize="16"
+                                   VerticalAlignment="Center" Width="26" />
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding ExcludedText}" FontSize="11" Foreground="{StaticResource WarnTextBrush}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                        <Button DockPanel.Dock="Right" Content="Choose…" Style="{StaticResource BorderedButton}" Click="ChooseCapture_Click"
+                                IsEnabled="{Binding CanChangeFolders}" VerticalAlignment="Center" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="CAPTURE FOLDER · WHERE THE IMAGES ARE LOCATED" Style="{StaticResource HeavyLabel}" />
+                            <TextBlock Text="{Binding CaptureFolderText}" ToolTip="{Binding CaptureFolderText}" Style="{StaticResource Mono}" FontSize="13" FontWeight="Medium"
+                                       TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
+                                <TextBlock.Foreground>
+                                    <Binding Path="HasCaptureFolder" Converter="{StaticResource BoolBrush}" ConverterParameter="TextBrush|WarnTextBrush" />
+                                </TextBlock.Foreground>
+                            </TextBlock>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!-- Target Folder -->
+                    <DockPanel Grid.Row="2" Margin="0,6,0,4">
+                        <TextBlock DockPanel.Dock="Left" Text="&#xE7B8;" Style="{StaticResource Icon}" Foreground="{StaticResource FolderIconBrush}" FontSize="15"
+                                   VerticalAlignment="Center" Width="26" />
+                        <Button DockPanel.Dock="Right" Content="Change…" Style="{StaticResource BorderedButton}" Click="ChangeTarget_Click" VerticalAlignment="Center" Margin="8,0,0,0" />
+                        <Button DockPanel.Dock="Right" Content="Remove Identical Copies…" Style="{StaticResource BorderedButton}" Click="RemoveCopies_Click"
+                                IsEnabled="{Binding CanChangeFolders}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                ToolTip="Find images saved more than once in Targets {year}\{object} and, after you say Yes twice, keep one copy of each." />
+                        <Border DockPanel.Dock="Right" Style="{StaticResource ScopeChip}" Visibility="{Binding TargetFolderSet, Converter={StaticResource BoolVisible}}">
+                            <TextBlock Text="{Binding TargetFolderScope}" FontSize="10" FontWeight="SemiBold" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="TARGET FOLDER · WHERE YOU WANT THEM PUT" Style="{StaticResource HeavyLabel}" />
+                            <TextBlock Text="{Binding TargetFolderText}" ToolTip="{Binding TargetFolderText}" Style="{StaticResource Mono}" FontSize="12" FontWeight="Medium"
+                                       TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
+                                <TextBlock.Foreground>
+                                    <Binding Path="TargetFolderSet" Converter="{StaticResource BoolBrush}" ConverterParameter="TextBrush|WarnTextBrush" />
+                                </TextBlock.Foreground>
+                            </TextBlock>
+                            <TextBlock Text="{Binding TargetFolderNote}" FontSize="10" FontWeight="Medium" TextWrapping="Wrap" MaxHeight="30"
+                                       Visibility="{Binding HasTargetFolderNote, Converter={StaticResource BoolVisible}}" Margin="0,1,10,0">
+                                <TextBlock.Foreground>
+                                    <Binding Path="TargetFolderNoteIsWarning" Converter="{StaticResource BoolBrush}" ConverterParameter="WarnTextBrush|LabelBrush" />
+                                </TextBlock.Foreground>
+                            </TextBlock>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!-- Backup Storage -->
+                    <DockPanel Grid.Row="3" Margin="0,6,0,10">
+                        <TextBlock DockPanel.Dock="Left" Text="&#xEDA2;" Style="{StaticResource Icon}" Foreground="{StaticResource FolderIconBrush}" FontSize="15"
+                                   VerticalAlignment="Center" Width="26" />
+                        <Button DockPanel.Dock="Right" Content="Change…" Style="{StaticResource BorderedButton}" Click="ChangeBackup_Click" VerticalAlignment="Center" Margin="8,0,0,0" />
+                        <Border DockPanel.Dock="Right" Style="{StaticResource ScopeChip}" Visibility="{Binding BackupFolderSet, Converter={StaticResource BoolVisible}}">
+                            <TextBlock Text="{Binding BackupFolderScope}" FontSize="10" FontWeight="SemiBold" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="BACKUP STORAGE" Style="{StaticResource HeavyLabel}" />
+                            <TextBlock Text="{Binding BackupFolderText}" ToolTip="{Binding BackupFolderText}" Style="{StaticResource Mono}" FontSize="12" FontWeight="Medium"
+                                       TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
+                                <TextBlock.Foreground>
+                                    <Binding Path="BackupFolderSet" Converter="{StaticResource BoolBrush}" ConverterParameter="TextBrush|WarnTextBrush" />
+                                </TextBlock.Foreground>
+                            </TextBlock>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!-- Destination card -->
+                    <Border Grid.Row="4" Background="{StaticResource DestinationCardBrush}" CornerRadius="12" Padding="16,14,16,12">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,10">
+                                <Button DockPanel.Dock="Right" Content="Refresh preview" Style="{StaticResource ProminentButton}" Click="Refresh_Click"
+                                        IsEnabled="{Binding CanChangeFolders}" VerticalAlignment="Bottom" Margin="10,0,0,0" />
+                                <ComboBox DockPanel.Dock="Right" Width="140" VerticalAlignment="Bottom" Margin="10,0,0,0" ItemsSource="{Binding Months}"
+                                          DisplayMemberPath="Title" SelectedValuePath="Id" SelectedValue="{Binding SelectedMonth}" IsEnabled="{Binding CanChangeFolders}"
+                                          AutomationProperties.Name="Month" />
+                                <ComboBox DockPanel.Dock="Right" Width="120" VerticalAlignment="Bottom" ItemsSource="{Binding Years}"
+                                          DisplayMemberPath="Title" SelectedValuePath="Id" SelectedValue="{Binding SelectedYear}" IsEnabled="{Binding CanChangeFolders}"
+                                          AutomationProperties.Name="Year" />
+                                <StackPanel>
+                                    <TextBlock Text="DESTINATION" Style="{StaticResource HeavyLabel}" />
+                                    <TextBlock Text="Choose a year and month" FontSize="16" FontWeight="SemiBold" Margin="0,4,0,4" />
+                                    <TextBlock Text="Objects decode into Targets {year}\{DSO} from smart-telescope layouts, or from object-named folders for any other telescope or camera."
+                                               FontSize="11" Foreground="{StaticResource SubtitleBrush}" TextWrapping="Wrap" Margin="0,0,10,0" />
+                                </StackPanel>
+                            </DockPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="FILES TO MOVE" Style="{StaticResource HeavyLabel}" Width="96" VerticalAlignment="Center" />
+                                <CheckBox Content="TIFF" IsChecked="{Binding TiffChecked}" Margin="0,0,16,0" IsEnabled="{Binding CanChangeFolders}" />
+                                <CheckBox Content="JPG / JPEG" IsChecked="{Binding JpegChecked}" Margin="0,0,16,0" IsEnabled="{Binding CanChangeFolders}" />
+                                <CheckBox Content="FITS / FIT" IsChecked="{Binding FitsChecked}" Margin="0,0,16,0" IsEnabled="{Binding CanChangeFolders}" />
+                                <CheckBox Content="All" IsChecked="{Binding AllTypesChecked}" IsEnabled="{Binding CanChangeFolders}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="OK TO DELETE" Style="{StaticResource HeavyLabel}" Width="96" VerticalAlignment="Center" />
+                                <CheckBox Content="JSON" IsChecked="{Binding DeleteJson}" Margin="0,0,16,0"
+                                          ToolTip="JSON files (observation, plan and session records) left in emptied capture folders." />
+                                <CheckBox Content="Astrometry" IsChecked="{Binding DeleteAstrometry}" Margin="0,0,16,0"
+                                          ToolTip="Plate-solve files left in emptied capture folders. Never deleted when you choose to leave plate solves." />
+                                <TextBlock Text="Unchecked: you're asked before a folder holding them is deleted" FontSize="11" Foreground="{StaticResource LabelBrush}" VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="BACKUP" Style="{StaticResource HeavyLabel}" Width="96" VerticalAlignment="Center" />
+                                <ComboBox DockPanel.Dock="Left" Width="160" ItemsSource="{Binding BackupChoices}" DisplayMemberPath="Title" SelectedValuePath="Id"
+                                          SelectedValue="{Binding BackupChoice}" AutomationProperties.Name="Backup format"
+                                          ToolTip="What Yes makes when Sort asks about a backup: a zip (.zip) or tarball (.tar.gz) of the capture folders, or a folder copy when Off. Built into the app — nothing to install." />
+                                <TextBlock Text="{Binding BackupNote}" ToolTip="{Binding BackupNote}" FontSize="11" Foreground="{StaticResource SubtitleBrush}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" Margin="12,0,0,0" />
+                            </DockPanel>
+
+                            <WrapPanel x:Name="ArchiverLinks" Margin="0,8,0,0" Visibility="{Binding BackupFailed, Converter={StaticResource BoolVisible}}">
+                                <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" Foreground="{StaticResource OrangeBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Text="Free Windows zip &amp; tarball apps:" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Missing Targets {year} -->
+                    <Border Grid.Row="5" Margin="0,10,0,0" Padding="12" CornerRadius="10" BorderThickness="1" BorderBrush="#66FF9500" Background="#14FF9500"
+                            Visibility="{Binding HasMissingYear, Converter={StaticResource BoolVisible}}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left" Text="&#xECC8;" Style="{StaticResource Icon}" Foreground="{StaticResource OrangeBrush}" FontSize="15"
+                                       VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <Button DockPanel.Dock="Right" Content="{Binding CreateMissingYearButton}" Style="{StaticResource BorderedButton}" Click="CreateMissing_Click" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding MissingYearTitle}" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock Text="Create the matching target folder before sorting." FontSize="11" Foreground="#B8A37D" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Capture table -->
+                    <DockPanel Grid.Row="6" Margin="0,12,0,0">
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                            <TextBlock DockPanel.Dock="Right" Text="Target folder shows where the image files will be put" FontSize="10"
+                                       Foreground="{StaticResource TableHintBrush}" VerticalAlignment="Bottom" />
+                            <TextBlock Text="{Binding RowsHeading}" FontSize="15" FontWeight="SemiBold" />
+                        </DockPanel>
+                        <Border CornerRadius="10" ClipToBounds="True" Background="White">
+                            <DataGrid x:Name="Table" ItemsSource="{Binding Rows}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
+                                      CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Extended" MinHeight="120">
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="Capture folder" Width="2*" MinWidth="180">
+                                        <DataGridTemplateColumn.CellStyle>
+                                            <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                                <Setter Property="AutomationProperties.Name" Value="{Binding CaptureFolderText}" />
+                                            </Style>
+                                        </DataGridTemplateColumn.CellStyle>
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding CaptureFolderText}" ToolTip="{Binding CaptureFolderText}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Year" Binding="{Binding Year}" Width="54" />
+                                    <DataGridTextColumn Header="Month" Binding="{Binding Month}" Width="58" />
+                                    <DataGridTemplateColumn Header="DSO object" Width="130">
+                                        <DataGridTemplateColumn.CellStyle>
+                                            <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                                <Setter Property="AutomationProperties.Name" Value="{Binding ObjectText}" />
+                                            </Style>
+                                        </DataGridTemplateColumn.CellStyle>
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock x:Name="Obj" Text="{Binding ObjectText}" ToolTip="{Binding ObjectHelp}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding NeedsObjectName}" Value="True">
+                                                        <Setter TargetName="Obj" Property="FontStyle" Value="Italic" />
+                                                        <Setter TargetName="Obj" Property="FontWeight" Value="Normal" />
+                                                        <Setter TargetName="Obj" Property="Foreground" Value="#C26A00" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Img folders" Binding="{Binding ImageFolders}" Width="76" />
+                                    <DataGridTextColumn Header="Files" Binding="{Binding Files}" Width="54" />
+                                    <DataGridTemplateColumn Header="Status" Width="130">
+                                        <DataGridTemplateColumn.CellStyle>
+                                            <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                                <Setter Property="AutomationProperties.Name" Value="{Binding Status}" />
+                                            </Style>
+                                        </DataGridTemplateColumn.CellStyle>
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock x:Name="St" Text="{Binding Status}" ToolTip="{Binding StatusHelp}" TextTrimming="CharacterEllipsis" />
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding IsDuplicateStatus}" Value="True">
+                                                        <Setter TargetName="St" Property="FontWeight" Value="SemiBold" />
+                                                        <Setter TargetName="St" Property="Foreground" Value="#C26A00" />
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Formats" Binding="{Binding Formats}" Width="90" />
+                                    <DataGridTemplateColumn Header="Target folder" Width="3*" MinWidth="200">
+                                        <DataGridTemplateColumn.CellStyle>
+                                            <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+                                                <Setter Property="AutomationProperties.Name" Value="{Binding TargetFolder}" />
+                                            </Style>
+                                        </DataGridTemplateColumn.CellStyle>
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding TargetFolder}" ToolTip="{Binding TargetPath}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+                                                           FontWeight="SemiBold" Foreground="{StaticResource TableDestinationBrush}" TextTrimming="CharacterEllipsis" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+                    </DockPanel>
+
+                    <!-- Stats -->
+                    <Border Grid.Row="7" Margin="0,12,0,0" Padding="14" CornerRadius="10" BorderThickness="1" BorderBrush="{StaticResource HairlineBrush}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Rows.Count}" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Text="folders ready to inspect" FontSize="10" Foreground="{StaticResource StatsBrush}" VerticalAlignment="Center" Margin="8,0,18,0" />
+                            <TextBlock Text="{Binding TotalFiles}" FontSize="18" FontWeight="Bold" VerticalAlignment="Center" />
+                            <TextBlock Text="image files to sort" FontSize="10" Foreground="{StaticResource StatsBrush}" VerticalAlignment="Center" Margin="8,0,18,0" />
+                            <TextBlock Text="&#xE8AB;" Style="{StaticResource Icon}" Foreground="{StaticResource LinkBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <TextBlock FontSize="11" Foreground="{StaticResource StatsBrush}" VerticalAlignment="Center"
+                                       Text="Nothing is overwritten; a clashing name gets a number.&#x0a;Only byte-identical copies count as duplicates." />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Plan bar -->
+                    <Border Grid.Row="8" Margin="0,12,0,0" Padding="14" CornerRadius="10" Background="{StaticResource PlanBarBrush}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="{Binding SortButtonTitle}" Style="{StaticResource ProminentButton}" Click="Sort_Click"
+                                    IsEnabled="{Binding CanSort}" Margin="10,0,0,0" />
+                            <Button DockPanel.Dock="Right" Content="Review file plan" Style="{StaticResource ProminentButton}" Click="Review_Click"
+                                    IsEnabled="{Binding CanReview}" />
+                            <TextBlock Text="{Binding PlanBarText}" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,10,0">
+                                <TextBlock.Foreground>
+                                    <Binding Path="PlanBarIsWarning" Converter="{StaticResource BoolBrush}" ConverterParameter="DuplicateTextBrush|PlanTextBrush" />
+                                </TextBlock.Foreground>
+                            </TextBlock>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Status -->
+                    <DockPanel Grid.Row="9" Margin="0,8,0,0">
+                        <TextBlock DockPanel.Dock="Left" Text="&#xE946;" Style="{StaticResource Icon}" Foreground="{StaticResource LabelBrush}" Margin="0,1,8,0" />
+                        <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" FontSize="11" Foreground="{StaticResource LabelBrush}" TextWrapping="Wrap" MaxHeight="48" />
+                    </DockPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

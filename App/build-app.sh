@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/App/Sources"
 ICONS="$ROOT/App/Icons"
 RESOURCES_SRC="$ROOT/App/Resources"
-APP_OUT="$ROOT/Smart Telescope Sort.app"
+APP_OUT="$ROOT/Telescope Data Sort.app"
 MACOS="$APP_OUT/Contents/MacOS"
 RESOURCES="$APP_OUT/Contents/Resources"
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
@@ -25,13 +25,13 @@ fi
 cp "$ICON_SRC" "$RESOURCES/AppIcon.icns"
 cp "$ICONS/AppIcon-OS27.icns" "$RESOURCES/AppIcon-OS27.icns" 2>/dev/null || true
 cp "$ICONS/AppIcon-OS15.icns" "$RESOURCES/AppIcon-OS15.icns" 2>/dev/null || true
-if [[ -f "$RESOURCES_SRC/Smart-Telescope-Sort-User-Manual.pdf" ]]; then
-  cp "$RESOURCES_SRC/Smart-Telescope-Sort-User-Manual.pdf" "$RESOURCES/Smart-Telescope-Sort-User-Manual.pdf"
+if [[ -f "$RESOURCES_SRC/Telescope-Data-Sort-User-Manual.pdf" ]]; then
+  cp "$RESOURCES_SRC/Telescope-Data-Sort-User-Manual.pdf" "$RESOURCES/Telescope-Data-Sort-User-Manual.pdf"
 fi
 cp "$RESOURCES_SRC/BigSkyAstro-logo.png" "$RESOURCES/BigSkyAstro-logo.png" 2>/dev/null || true
 cp "$RESOURCES_SRC/GitHub-logo.png" "$RESOURCES/GitHub-logo.png" 2>/dev/null || true
 
-echo "Building Smart Telescope Sort.app (universal ${ARCHS[*]}, macOS $MIN_OS+, icon $ICON_VARIANT)..."
+echo "Building Telescope Data Sort.app (universal ${ARCHS[*]}, macOS $MIN_OS+, icon $ICON_VARIANT)..."
 rm -rf "$BINS"
 mkdir -p "$BINS"
 PIDS=()
@@ -45,6 +45,8 @@ for arch in "${ARCHS[@]}"; do
     "$SRC/CaptureSorter.swift" \
     "$SRC/LibraryFolders.swift" \
     "$SRC/AgreementRecord.swift" \
+    "$SRC/Credits.swift" \
+    "$SRC/CreditsView.swift" \
     "$SRC/ContentView.swift" \
     "$SRC/SmartTelescopeSortApp.swift" \
     -o "$BINS/SmartTelescopeSort-$arch" \

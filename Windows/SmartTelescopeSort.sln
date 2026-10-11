@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{22E0B447-C25B-4606-9C91-6589EDE8C775}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartTelescopeSort.Core", "src\SmartTelescopeSort.Core\SmartTelescopeSort.Core.csproj", "{1FAFC90C-0A53-4267-92A6-7A83135F7377}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartTelescopeSort.App", "src\SmartTelescopeSort.App\SmartTelescopeSort.App.csproj", "{A4BB9F99-9148-4E52-BE5B-CFFEC29F7995}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartTelescopeSort.Cli", "src\SmartTelescopeSort.Cli\SmartTelescopeSort.Cli.csproj", "{DF746E82-15ED-4112-A618-E887D372FB35}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{C390499C-D644-417A-8D8D-1E5CC881F0FF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartTelescopeSort.Core.Tests", "tests\SmartTelescopeSort.Core.Tests\SmartTelescopeSort.Core.Tests.csproj", "{BCF87744-46C0-49C2-8DAC-A822F5A59DF7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1FAFC90C-0A53-4267-92A6-7A83135F7377}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1FAFC90C-0A53-4267-92A6-7A83135F7377}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1FAFC90C-0A53-4267-92A6-7A83135F7377}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1FAFC90C-0A53-4267-92A6-7A83135F7377}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4BB9F99-9148-4E52-BE5B-CFFEC29F7995}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4BB9F99-9148-4E52-BE5B-CFFEC29F7995}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4BB9F99-9148-4E52-BE5B-CFFEC29F7995}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4BB9F99-9148-4E52-BE5B-CFFEC29F7995}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DF746E82-15ED-4112-A618-E887D372FB35}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DF746E82-15ED-4112-A618-E887D372FB35}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DF746E82-15ED-4112-A618-E887D372FB35}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DF746E82-15ED-4112-A618-E887D372FB35}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BCF87744-46C0-49C2-8DAC-A822F5A59DF7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BCF87744-46C0-49C2-8DAC-A822F5A59DF7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BCF87744-46C0-49C2-8DAC-A822F5A59DF7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BCF87744-46C0-49C2-8DAC-A822F5A59DF7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{1FAFC90C-0A53-4267-92A6-7A83135F7377} = {22E0B447-C25B-4606-9C91-6589EDE8C775}
+		{A4BB9F99-9148-4E52-BE5B-CFFEC29F7995} = {22E0B447-C25B-4606-9C91-6589EDE8C775}
+		{DF746E82-15ED-4112-A618-E887D372FB35} = {22E0B447-C25B-4606-9C91-6589EDE8C775}
+		{BCF87744-46C0-49C2-8DAC-A822F5A59DF7} = {C390499C-D644-417A-8D8D-1E5CC881F0FF}
+	EndGlobalSection
+EndGlobal

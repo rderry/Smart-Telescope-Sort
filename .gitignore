@@ -6,7 +6,8 @@
 .idea/
 DerivedData/
 .build-bins/
-*.app
+/*.app/
+**/*.app/Contents/
 .env
 .env.*
 *.p8
@@ -17,3 +18,17 @@ DerivedData/
 *.mobileprovision
 *.keychain
 AuthKey_*.p8
+
+# Build and release outputs
+*.pkg
+*.dmg
+*.zip
+*.msix
+*.msixbundle
+*.msixupload
+*.pfx
+**/bin/
+**/obj/
+Dist/
+Store-Packages/
+Windows-Publish-*/

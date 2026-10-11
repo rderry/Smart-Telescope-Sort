@@ -8,6 +8,11 @@ final class SortViewModel: ObservableObject {
         didSet { UserDefaults.standard.set(telescopeKind.rawValue, forKey: TelescopeKind.storageKey) }
     }
     @Published var layoutDetected = false
+    /// `telescopeKind` keeps the last layout found, so it isn't shown when this Capture Folder matched none.
+    private var showsOtherLayout: Bool { lockedKind == nil && !layoutDetected }
+    var layoutTitle: String { showsOtherLayout ? TelescopeKind.otherLayoutTitle : telescopeKind.menuTitle }
+    var layoutNote: String { showsOtherLayout ? TelescopeKind.otherCompatibilityNote : telescopeKind.compatibilityNote }
+    var layoutDropHint: String { showsOtherLayout ? TelescopeKind.otherDropHint : telescopeKind.dropHint }
     @Published var fileTypes: Set<SortFileType> = Set(SortFileType.defaults) {
         didSet {
             UserDefaults.standard.set(fileTypes.map(\.rawValue).sorted(), forKey: Self.fileTypesKey)
@@ -228,6 +233,8 @@ final class SortViewModel: ObservableObject {
         return parts.joined(separator: " · ")
     }
 
+    var shownEntries: [CaptureEntry] { CaptureSorter.rowsToShow(entries) }
+
     var spentCaptureNames: [String] {
         let grouped = Dictionary(grouping: entries, by: \.captureFolder)
         let root = URL(fileURLWithPath: sourcePath)
@@ -339,7 +346,7 @@ final class SortViewModel: ObservableObject {
         plateSolveFolders = output.plateSolves
         status = !sourceAvailable ? "Capture Folder unavailable."
             : fileTypes.isEmpty ? "Check at least one file type under Files to Move."
-            : "Preview ready for \(telescopeKind.menuTitle) (\(fileTypesSummary)) — no files have been moved."
+            : "Preview ready for \(layoutTitle) (\(fileTypesSummary)) — no files have been moved."
                 + (plateSolveFolders.isEmpty && calibrationFolders.isEmpty ? ""
                     : " \(plateSolveFolders.count) plate-solve and \(calibrationFolders.count) calibration folder(s) are left out; you'll be asked about them after sorting.")
         if selectedYear != "all", !years.contains(selectedYear), let first = years.first {
@@ -1337,11 +1344,11 @@ final class SortViewModel: ObservableObject {
     }
 
     func openUserManual() {
-        if let url = Bundle.main.url(forResource: "Smart-Telescope-Sort-User-Manual", withExtension: "pdf") {
+        if let url = Bundle.main.url(forResource: "Telescope-Data-Sort-User-Manual", withExtension: "pdf") {
             NSWorkspace.shared.open(url)
             return
         }
-        let fallback = URL(fileURLWithPath: "/Volumes/Large Drive/Smart Telescope Sort program/App/Resources/Smart-Telescope-Sort-User-Manual.pdf")
+        let fallback = URL(fileURLWithPath: "/Volumes/Large Drive/Smart Telescope Sort program/App/Resources/Telescope-Data-Sort-User-Manual.pdf")
         if FileManager.default.fileExists(atPath: fallback.path) {
             NSWorkspace.shared.open(fallback)
         } else {
@@ -1352,6 +1359,7 @@ final class SortViewModel: ObservableObject {
 
 extension Notification.Name {
     static let showAssumptions = Notification.Name("SmartTelescopeSort.showAssumptions")
+    static let showCredits = Notification.Name("SmartTelescopeSort.showCredits")
 }
 
 /// What the app takes for granted, shown when it opens and from the Help menu.
@@ -1370,6 +1378,8 @@ struct AssumptionsSheet: View {
     private let points = [
         "Capture Folder: where your images are. All subfolders are searched.",
         "Images move to the Target Folder by DSO or celestial name: Targets {year}/{object}.",
+        "Any telescope or camera: smart-telescope layouts (Vespera, Stellina, Seestar, DWARF, Origin) are detected. "
+            + "Images from other telescopes, including classic setups, sort when a folder above them names the object, e.g. M31/.",
         "No object name found? Before sorting you name them all in one list. The date is the default.",
         "Dates come from folder names, else from the files.",
         "Only file types checked under Files to Move are moved (TIFF, JPG, FITS).",
@@ -1377,7 +1387,7 @@ struct AssumptionsSheet: View {
         "Exact copies are marked Duplicate and deleted only if you say Yes.",
         "Not sorted: Targets {year} folders, thumbnails, auto-init frames.",
         "Emptied folders are deleted. JSON and astrometry files only if checked under OK to Delete or you allow it; folders with other files (e.g. .afphoto) are kept.",
-        "After sorting, choose Move, Leave or Delete for plate solves, then for Lights, Darks, Dark Flats, Flats, Bias, Master*.",
+        "After sorting, choose Move, Leave or Delete for plate solves, then for Lights, Darks, Dark Flats, Flats, Bias, Master* folders. Frames inside those folders are not sorted.",
         "Plate solves move in with their images: Targets {year}/{object}/Plate Solves. Unnamed ones are named in one list.",
     ]
 
@@ -1442,11 +1452,25 @@ struct ContentView: View {
     @StateObject private var model = SortViewModel()
     @AppStorage("SmartTelescopeSort.showAssumptionsAtLaunch") private var showAssumptionsAtLaunch = true
     @State private var showAssumptions = false
+    @State private var showCredits = false
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-            workspace
+        VStack(spacing: 0) {
+            Text(TelescopeKind.untestedNotice)
+                .font(.system(size: 13))
+                .bold()
+                .foregroundStyle(Color(red: 1.0, green: 0.84, blue: 0.45))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 16)
+                .background(Color(red: 0.10, green: 0.09, blue: 0.04))
+                .accessibilityIdentifier("untestedNotice")
+            HStack(spacing: 0) {
+                sidebar
+                workspace
+            }
         }
         .background(Color(red: 0.02, green: 0.04, blue: 0.08))
         .foregroundStyle(Color(red: 0.92, green: 0.94, blue: 1.0))
@@ -1468,6 +1492,12 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showAssumptions, onDismiss: { model.start() }) {
             AssumptionsSheet(showAtLaunch: $showAssumptionsAtLaunch) { showAssumptions = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showCredits)) { _ in
+            showCredits = true
+        }
+        .sheet(isPresented: $showCredits) {
+            CreditsSheet { showCredits = false }
         }
         .confirmationDialog(
             "Create Targets folder?",
@@ -1724,7 +1754,7 @@ struct ContentView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("File plan").font(.title2.bold())
-                        Text(model.telescopeKind.menuTitle)
+                        Text(model.layoutTitle)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -1834,6 +1864,29 @@ struct ContentView: View {
         }
     }
 
+    /// Scrolls only when the window is too short to show it whole (the notice above takes a line).
+    private var howItWorks: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("HOW IT WORKS")
+                .font(.system(size: 9, weight: .heavy))
+                .tracking(1.1)
+                .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
+                .frame(maxWidth: .infinity, alignment: .center)
+            infoLine(icon: "folder", text: model.layoutDropHint + " The layout is detected; Targets {year} folders are skipped.")
+            infoLine(icon: "line.3.horizontal.decrease.circle", text: "Pick a year, a month and the file types to move: TIFF, JPG/JPEG, FITS/FIT or All.")
+            infoLine(icon: "list.bullet.rectangle", text: "Review file plan lists every file with its object, date and target folder.")
+            infoLine(icon: "archivebox", text: "Optional Zip or Tarball backup. You name it, and a progress window shows it running.")
+            infoLine(icon: "arrow.right.doc.on.clipboard", text: "Sort copies the checked file types into Targets {year}/{object} and checks each copy byte for byte. Nothing there is overwritten.")
+            infoLine(icon: "doc.on.doc", text: "Files already in the Target Folder are marked Duplicate. Plate solves go to {object}/Plate Solves.")
+            infoLine(icon: "trash", text: "Originals, then the processed capture folders, are deleted only after you say Yes twice.")
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(red: 0.10, green: 0.16, blue: 0.30).opacity(0.55))
+        )
+    }
+
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .center, spacing: 8) {
@@ -1851,10 +1904,10 @@ struct ContentView: View {
                     .help("Open bigskyastro.com")
                 }
                 VStack(alignment: .center, spacing: 3) {
-                    Text("Smart Telescope Sort")
+                    Text("Telescope Data Sort")
                         .font(.system(size: 17, weight: .bold))
                     Text(model.lockedKind == nil
-                         ? "Multi-brand Captures → Targets"
+                         ? "Smart & classic telescopes → Targets"
                          : "Independent app. Not affiliated with telescope makers.")
                         .font(.system(size: 11))
                         .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
@@ -1864,31 +1917,24 @@ struct ContentView: View {
             .frame(maxWidth: .infinity)
             .padding(.bottom, 2)
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text("HOW IT WORKS")
-                    .font(.system(size: 9, weight: .heavy))
-                    .tracking(1.1)
-                    .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
-                    .frame(maxWidth: .infinity, alignment: .center)
-                infoLine(icon: "folder", text: model.telescopeKind.dropHint + " The layout is detected; Targets {year} folders are skipped.")
-                infoLine(icon: "line.3.horizontal.decrease.circle", text: "Pick a year, a month and the file types to move: TIFF, JPG/JPEG, FITS/FIT or All.")
-                infoLine(icon: "list.bullet.rectangle", text: "Review file plan lists every file with its object, date and target folder.")
-                infoLine(icon: "archivebox", text: "Optional Zip or Tarball backup. You name it, and a progress window shows it running.")
-                infoLine(icon: "arrow.right.doc.on.clipboard", text: "Sort copies the checked file types into Targets {year}/{object} and checks each copy byte for byte. Nothing there is overwritten.")
-                infoLine(icon: "doc.on.doc", text: "Files already in the Target Folder are marked Duplicate. Plate solves go to {object}/Plate Solves.")
-                infoLine(icon: "trash", text: "Originals, then the processed capture folders, are deleted only after you say Yes twice.")
+            ViewThatFits(in: .vertical) {
+                howItWorks
+                ScrollView { howItWorks }
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(red: 0.10, green: 0.16, blue: 0.30).opacity(0.55))
-            )
 
-            Spacer()
+            Spacer(minLength: 0)
             Button {
                 model.openUserManual()
             } label: {
                 Label("Open user manual (PDF)", systemImage: "book.pages")
+                    .font(.system(size: 11, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
+            Button {
+                showCredits = true
+            } label: {
+                Label("Credits", systemImage: "person.2")
                     .font(.system(size: 11, weight: .bold))
             }
             .buttonStyle(.plain)
@@ -1988,10 +2034,10 @@ struct ContentView: View {
                         .tracking(1.2)
                         .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
                     Text("Ready to review").font(.system(size: 24, weight: .bold))
-                    Text(model.telescopeKind.menuTitle + (model.layoutDetected ? " · detected" : ""))
+                    Text(model.layoutTitle + (model.layoutDetected ? " · detected" : ""))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color(red: 0.55, green: 0.70, blue: 1.0))
-                        .help(model.telescopeKind.compatibilityNote)
+                        .help(model.layoutNote)
                 }
                 Spacer()
                 VStack(alignment: .leading, spacing: 4) {
@@ -2036,7 +2082,7 @@ struct ContentView: View {
                         Text("DESTINATION").font(.system(size: 9, weight: .heavy))
                             .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
                         Text("Choose a year and month").font(.system(size: 16, weight: .semibold))
-                        Text("Objects decode into Targets {year}/{DSO} for the detected capture layout.")
+                        Text("Objects decode into Targets {year}/{DSO} from smart-telescope layouts, or from object-named folders for any other telescope or camera.")
                             .font(.system(size: 11))
                             .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
                     }
@@ -2186,7 +2232,7 @@ struct ContentView: View {
     private var table: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("\(model.entries.count) capture rows found")
+                Text("\(model.shownEntries.count) capture rows found")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color(red: 0.90, green: 0.93, blue: 1.0))
                 Spacer()
@@ -2194,7 +2240,7 @@ struct ContentView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(Color(red: 0.70, green: 0.76, blue: 0.88))
             }
-            Table(model.entries) {
+            Table(model.shownEntries) {
                 TableColumn("Capture folder") { (entry: CaptureEntry) in
                     Text(entry.captureFolder.isEmpty ? URL(fileURLWithPath: model.sourcePath).lastPathComponent : entry.captureFolder)
                         .font(.system(size: 11, design: .monospaced))
@@ -2299,7 +2345,7 @@ struct ContentView: View {
 
     private var stats: some View {
         HStack(spacing: 18) {
-            stat(value: "\(model.entries.count)", label: "folders ready to inspect")
+            stat(value: "\(model.shownEntries.count)", label: "folders ready to inspect")
             stat(value: "\(model.entries.reduce(0) { $0 + $1.files })", label: "image files to sort")
             HStack(spacing: 10) {
                 Image(systemName: "arrow.left.arrow.right")

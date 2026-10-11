@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Smart Telescope Sort for:
+# Build Telescope Data Sort for:
 #   1) Free dual installer (Apple Silicon + Intel, Developer ID signed)
 #   2) App Store Connect package (universal, Apple Distribution + installer pkg)
 #
@@ -22,19 +22,19 @@ TEAM="JA83U5948W"
 BUNDLE_ID="com.derry.SmartTelescopeSort"
 
 DIST_DUAL="$ROOT/Dist/macOS15"
-STAGE="$DIST_DUAL/staging/Smart-Telescope-Sort-macOS15-Installer"
+STAGE="$DIST_DUAL/staging/Telescope-Data-Sort-macOS15-Installer"
 PAYLOADS="$STAGE/Payloads"
-ZIP_OUT="$DIST_DUAL/Smart-Telescope-Sort-macOS15-Installer.zip"
+ZIP_OUT="$DIST_DUAL/Telescope-Data-Sort-macOS15-Installer.zip"
 
-# Keep in sync with the newest Connect upload. Builds 4-8 are already used.
-# Bump MARKETING_VERSION / BUILD_NUMBER together before the next ASC upload.
-MARKETING_VERSION="1.2"
-BUILD_NUMBER="9"
+# Keep in sync with the newest Connect upload. Builds 4-9 are uploaded; 10 was a local build only.
+# 1.2 (9) is live on the App Store, so the next upload is 1.2.1.
+MARKETING_VERSION="1.2.1"
+BUILD_NUMBER="11"
 
 ASC_OUT="$ROOT/AppStore/Connect-Package-${MARKETING_VERSION}-${BUILD_NUMBER}"
-ASC_APP="$ASC_OUT/Smart Telescope Sort.app"
+ASC_APP="$ASC_OUT/Telescope Data Sort.app"
 BINS="$ROOT/.build-bins/release"
-ASC_PKG="$ASC_OUT/SmartTelescopeSort-${MARKETING_VERSION}.${BUILD_NUMBER}-MacAppStore.pkg"
+ASC_PKG="$ASC_OUT/TelescopeDataSort-${MARKETING_VERSION}.${BUILD_NUMBER}-MacAppStore.pkg"
 
 DID_ID="$(security find-identity -p codesigning -v 2>/dev/null | awk -F'"' '/Developer ID Application:/{print $2; exit}')"
 DIST_ID="$(security find-identity -p codesigning -v 2>/dev/null | awk -F'"' '/Apple Distribution:/{print $2; exit}')"
@@ -45,6 +45,8 @@ SOURCES=(
   "$SRC/CaptureSorter.swift"
   "$SRC/LibraryFolders.swift"
   "$SRC/AgreementRecord.swift"
+  "$SRC/Credits.swift"
+  "$SRC/CreditsView.swift"
   "$SRC/ContentView.swift"
   "$SRC/SmartTelescopeSortApp.swift"
 )
@@ -53,7 +55,7 @@ if [[ ! -f "$ICONS/AppIcon-${ICON_VARIANT}.icns" ]]; then
   echo "Missing icon: $ICONS/AppIcon-${ICON_VARIANT}.icns" >&2
   exit 1
 fi
-if [[ ! -f "$RESOURCES_SRC/Smart-Telescope-Sort-User-Manual.pdf" ]]; then
+if [[ ! -f "$RESOURCES_SRC/Telescope-Data-Sort-User-Manual.pdf" ]]; then
   python3 "$ROOT/App/Scripts/build-user-manual.py"
 fi
 if [[ -z "$DID_ID" ]]; then
@@ -101,8 +103,8 @@ assemble_app() {
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VERSION" "$app/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$app/Contents/Info.plist"
   cp "$ICONS/AppIcon-${ICON_VARIANT}.icns" "$app/Contents/Resources/AppIcon.icns"
-  cp "$RESOURCES_SRC/Smart-Telescope-Sort-User-Manual.pdf" \
-    "$app/Contents/Resources/Smart-Telescope-Sort-User-Manual.pdf"
+  cp "$RESOURCES_SRC/Telescope-Data-Sort-User-Manual.pdf" \
+    "$app/Contents/Resources/Telescope-Data-Sort-User-Manual.pdf"
   cp "$RESOURCES_SRC/BigSkyAstro-logo.png" "$app/Contents/Resources/BigSkyAstro-logo.png"
   cp "$RESOURCES_SRC/GitHub-logo.png" "$app/Contents/Resources/GitHub-logo.png"
   cp "$bin" "$app/Contents/MacOS/SmartTelescopeSort"
@@ -123,20 +125,20 @@ mkdir -p "$PAYLOADS/arm64" "$PAYLOADS/x86_64" "$BINS"
 compile_arch arm64 "$BINS/SmartTelescopeSort-arm64"
 compile_arch x86_64 "$BINS/SmartTelescopeSort-x86_64"
 
-assemble_app "$PAYLOADS/arm64/Smart Telescope Sort.app" \
+assemble_app "$PAYLOADS/arm64/Telescope Data Sort.app" \
   "$BINS/SmartTelescopeSort-arm64" "$ENT_DID" "$DID_ID"
-assemble_app "$PAYLOADS/x86_64/Smart Telescope Sort.app" \
+assemble_app "$PAYLOADS/x86_64/Telescope Data Sort.app" \
   "$BINS/SmartTelescopeSort-x86_64" "$ENT_DID" "$DID_ID"
 
 HOST_ARCH="$(uname -m)"
-HOST_APP="$ROOT/Smart Telescope Sort macOS15.app"
+HOST_APP="$ROOT/Telescope Data Sort macOS15.app"
 rm -rf "$HOST_APP"
-ditto "$PAYLOADS/${HOST_ARCH}/Smart Telescope Sort.app" "$HOST_APP"
+ditto "$PAYLOADS/${HOST_ARCH}/Telescope Data Sort.app" "$HOST_APP"
 
 cp "$ROOT/App/macos15-installer/Install.command" "$STAGE/Install.command"
 cp "$ROOT/App/macos15-installer/README.txt" "$STAGE/README.txt"
-cp "$RESOURCES_SRC/Smart-Telescope-Sort-User-Manual.pdf" \
-  "$STAGE/Smart-Telescope-Sort-User-Manual.pdf"
+cp "$RESOURCES_SRC/Telescope-Data-Sort-User-Manual.pdf" \
+  "$STAGE/Telescope-Data-Sort-User-Manual.pdf"
 chmod +x "$STAGE/Install.command"
 
 # Mark free immediate release in installer README stamp
@@ -150,7 +152,7 @@ chmod +x "$STAGE/Install.command"
 rm -f "$ZIP_OUT"
 (
   cd "$DIST_DUAL/staging"
-  ditto -c -k --sequesterRsrc --keepParent "Smart-Telescope-Sort-macOS15-Installer" "$ZIP_OUT"
+  ditto -c -k --sequesterRsrc --keepParent "Telescope-Data-Sort-macOS15-Installer" "$ZIP_OUT"
 )
 
 echo "=== App Store Connect package (universal) ==="
@@ -215,7 +217,7 @@ cp -R "$ROOT/AppStore/Images/." "$ASC_OUT/Images/" 2>/dev/null || true
 ditto "$ROOT/Demo Captures" "$ASC_OUT/Demo Captures"
 
 cat > "$ASC_OUT/UPLOAD-NOTES.txt" <<EOF
-Smart Telescope Sort — Free — Immediate release package
+Telescope Data Sort — Free — Immediate release package
 Version ${MARKETING_VERSION} (${BUILD_NUMBER}) · Bundle ID $BUNDLE_ID · Team $TEAM
 
 Dual installer (email / USB / website):

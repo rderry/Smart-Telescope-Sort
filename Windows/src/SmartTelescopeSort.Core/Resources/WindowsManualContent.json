@@ -1,0 +1,277 @@
+{
+  "title": "Telescope Data Sort",
+  "subtitle": "User Manual · Version 1.2.1 for Windows (formerly Smart Telescope Sort)",
+  "platform": "Windows 11 · x64 and Arm64 · Open-source freeware",
+  "notice": "This has not been tested with other telescopes, but there is no reason it will not work with almost any data that it supports!",
+  "purpose": "Organize TIFF, FITS and JPG captures into one year / object library: from smart telescopes, and from any other telescope or camera, including classic setups, when the files are in folders named for the object. The app does not connect to the telescope: you copy sessions onto your PC first, choose that Captures folder, and the app recognizes smart-telescope folder layouts for you.",
+  "cover": { "image": "01-main", "caption": "The main window: the folder layout is detected, and every capture folder is listed with its object, file count and destination before anything moves." },
+  "sections": [
+    {
+      "title": "1. Assumptions (read this first)",
+      "level": 1,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "**You already moved files off the scope** (USB, FTP, or Wi-Fi). The app never talks to a telescope, camera, or capture program.",
+          "**Any telescope or camera works.** Smart-telescope layouts (Vespera, Stellina, Seestar, DWARF, Origin) are detected. Images from any other telescope or camera, including classic setups, are sorted when they sit in a folder named for the object. See **4.5 Using data from other telescopes**.",
+          "**One brand per Captures folder.** The layout is detected from the folder you choose. Do not mix Seestar albums and Vaonis dated sessions in the same Captures folder.",
+          "**You choose the file types:** TIFF, JPG / JPEG, FITS / FIT, or All. TIFF and FITS are checked by default; JPG is usually for viewing and sharing.",
+          "**The Photos app is not a source.** Export to a Captures folder in File Explorer if images only live in Photos or OneDrive's online-only storage.",
+          "**Every brand uses the same library layout:** `Targets {year}\\{object}\\` inside your Target Folder.",
+          "**The whole Capture Folder is scanned**, every subfolder in one pass. Folders with no object name are listed together so you can name them all at once.",
+          "**Year** comes from dated folder names when present; otherwise from the newest image file's Date modified (as File Explorer shows it).",
+          "**Object name** is decoded from observation / album / object folder names: the nearest folder whose name holds a catalog number (M31, NGC 7000…) or a solar-system name.",
+          "**Nothing is overwritten.** If Targets already holds a different file with the same name, the new copy gets a number (`IMG_0001 2.jpg`). Only byte-identical copies count as duplicates, including copies saved under a number.",
+          "**Targets {year}** folders are never scanned as sources and are never removed."
+        ] }
+      ]
+    },
+    {
+      "title": "1.1 First launch: terms and backup advice",
+      "level": 2,
+      "blocks": [
+        { "type": "paragraph", "text": "The first time the app opens it shows the assumptions, the backup advice and the disclaimer: *BigSkyAstro is not responsible for the loss of data. We have built in many safeguards to prevent it. The user accepts all liability using this freeware.* Check **I have read and accept the above**, then press **I Understand**. Your agreement is saved once, in a locked PDF on your PC, and is never overwritten; the next time the box is already checked and greyed out. **Help → Terms Acceptance Record…** shows when you agreed and where the record is kept." }
+      ]
+    },
+    {
+      "title": "1.2 What the app does not do",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "It does not stack, stretch, or post-process images.",
+          "It does not convert files. Each file is copied unchanged, in its own format.",
+          "It does not sort camera RAW files (CR2, CR3, NEF, ARW, DNG), video (SER, AVI), XISF, or PNG, and it does not read FITS headers or EXIF.",
+          "It does not recognize Unistellar's own folder layout in this version.",
+          "It does not invent missing object names — if a folder has no usable name, the object label may be the parent folder name."
+        ] }
+      ]
+    },
+    {
+      "title": "2. Your three folders",
+      "level": 1,
+      "blocks": [
+        { "type": "paragraph", "text": "The first time the app opens it asks where two library folders live. Check **Save this as default** to keep the choice; leave it unchecked to use it for this session only. Each folder has a **Change…** button in the main window, and a label beside it shows **Default** or **This session**. Folders can be on any drive letter (for example `D:\\Astro`), a USB drive, or a network share (`\\\\NAS\\Astro`)." },
+        { "type": "bullets", "items": [
+          "**Capture Folder** — where the images are located. Choose it with the **Choose…** button. The folder layout is detected each time the preview refreshes.",
+          "**Target Folder** — where you want them put: it holds your `Targets {year}` folders. If it is not set, Targets folders go inside the Capture Folder.",
+          "**Backup Storage** — where backups are written before a sort."
+        ] },
+        { "type": "paragraph", "text": "Status lights in the top right show each folder at a glance: **green** when it is selected (and, for the Capture Folder, available), **red** until it is chosen." },
+        { "type": "code", "text": "{Target Folder}\\Targets {year}\\{object}\\\nexample:  D:\\Astro\\Targets\\Targets 2026\\M31\\\nexample:  D:\\Astro\\Targets\\Targets 2026\\M42\\" },
+        { "type": "paragraph", "text": "If the year folder does not exist yet, the app offers to create `Targets {year}` first. No files move when it is created." }
+      ]
+    },
+    {
+      "title": "3. Detected folder layouts",
+      "level": 1,
+      "blocks": [
+        { "type": "paragraph", "text": "Telescope names identify folder layouts only. Telescope Data Sort is an independent app and is not affiliated with, endorsed by, or created by those manufacturers. The detected layout is shown under the title, for example *Dated session folders · detected*. When no smart-telescope layout is found it reads *Folders from any telescope or camera*. Every layout is sorted the same way, so the label never changes where files go." },
+        { "type": "table", "rows": [
+          ["Layout", "Telescopes", "What the folders look like"],
+          ["Dated session folders", "Vespera, Stellina", "2026-09-10_22-15-03_observation_M31"],
+          ["Object album folders", "S30, S30 Pro, S50", "M31\\, NGC253\\ (or a USB dump of albums)"],
+          ["Session folders", "DWARF 3, II, mini", "20260907_DWARF3_session\\M33\\"],
+          ["Object-and-date folders", "Origin Mark II", "M31_2026-09-05\\"],
+          ["Object folders", "Any other, incl. classic", "M31\\, 2026-10-07\\NGC 7000\\ (see 4.5)"]
+        ] }
+      ]
+    },
+    {
+      "title": "4. How each telescope gets files onto the PC",
+      "level": 1,
+      "blocks": [
+        { "type": "paragraph", "text": "Offload is done outside this app, usually by dragging folders in File Explorer. Below: how vendors typically expose files and what the app expects after you copy them into Captures." }
+      ]
+    },
+    {
+      "title": "4.1 Vespera / Stellina",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "**Off the scope:** FTP the **User\\** dated folders (File Explorer can open `ftp://` addresses, or use any FTP app). Newer models also support USB-C transfer, where the telescope appears as a drive in This PC. Multi-night: stop each night so the project saves, then copy each night's dated folder.",
+          "**In Captures:** keep dated names unchanged, e.g. `2026-09-21_11-43-55_observation_M31` or `…_plan_My_plan` with nested `01-observation-…` and `01-images-…`."
+        ] },
+        { "type": "code", "text": "User\\   (on telescope)\n  2026-09-10_22-15-03_observation_M31\\\n    01-images-initial\\\n      img-0001.tiff\n      img-0002.fits\n→ copy whole folder into Captures → Sort → Targets 2026\\M31\\" }
+      ]
+    },
+    {
+      "title": "4.2 S30 / S30 Pro / S50",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "**Off the scope:** USB cable (the telescope shows up as a drive in This PC, often with **MyWorks** / object folders), Wi-Fi file share (map it in File Explorer), or app export of **FIT**.",
+          "**In Captures:** object albums with `.fit / .fits` inside (e.g. `M31\\`, or a USB dump containing several albums)."
+        ] },
+        { "type": "code", "text": "MyWorks\\\n  M31\\\n    ….fit\n  NGC253\\\n    ….fits\n→ copy albums (or the dump) into Captures → Sort → Targets {year}\\M31\\" }
+      ]
+    },
+    {
+      "title": "4.3 DWARF 3 / II / mini",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "**Off the scope:** USB mass storage (appears as a drive in This PC) and/or FTP (often `ftp://192.168.88.1` on the telescope's Wi-Fi).",
+          "**In Captures:** keep each session folder intact. The object may be a nested folder (e.g. `…\\M33\\`) under a dated session."
+        ] },
+        { "type": "code", "text": "Astronomy\\<session>\\\n  M33\\\n    stacked.fits\n    stacked.tiff\n    sub_0001.fits\n→ copy session into Captures → Sort → Targets {year}\\M33\\" }
+      ]
+    },
+    {
+      "title": "4.4 Origin Mark II",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "**Off the scope:** enable **Save Raw Images**, then copy via USB stick (FAT32/exFAT) from the app File Manager, or FTP to a computer.",
+          "**In Captures:** folders named object + date, e.g. `M31_2026-09-05\\` with `.fits`. A parent USB dump with several object + date folders also works."
+        ] },
+        { "type": "code", "text": "M31_2026-09-05\\\n  raw_0001.fits\n  raw_0002.fits\n→ copy into Captures → Sort → Targets 2026\\M31\\" }
+      ]
+    },
+    {
+      "title": "4.5 Using data from other telescopes",
+      "level": 2,
+      "blocks": [
+        { "type": "paragraph", "text": "Telescope Data Sort works with images from any telescope or camera, including classic setups: a dedicated astronomy camera or a DSLR on any telescope, captured with programs such as ASIAIR, NINA or SharpCap, or exported from a DSLR as TIFF. The app reads only folder names and file dates, so these files sort when they are arranged as follows." },
+        { "type": "bullets", "items": [
+          "**File types:** TIFF (`.tif, .tiff`) and FITS (`.fit, .fits`) are sorted by default; JPG (`.jpg, .jpeg`) when you check it. Upper or lower case doesn't matter. Other files, including camera RAW, video, XISF, PNG and `.fts`, are not sorted. Files are copied unchanged; nothing is converted.",
+          "**Object:** put the images in a folder named for the object, or below one. The nearest folder whose name holds a catalog number (M, NGC, IC, Sh2, B / Barnard, LDN, LBN, vdB, Abell, Arp, Mel, Cr / Collinder, UGC, PGC, C / Caldwell, followed by a number) or the Moon, Sun, a planet or a comet names the object. The folder's whole name, without dates, becomes the object folder in capitals with dashes for spaces: `NGC 7000` becomes `NGC-7000`, `M31 Andromeda` becomes `M31-ANDROMEDA`. Name the folder just the object.",
+          "**No object folder?** Those images are listed together before sorting so you can name them; the date is filled in as the suggestion.",
+          "**Year:** from the nearest folder name with a date, at or above the images: `2026-10-07` (a time such as `_22-15-03` may follow), `20261007`, `10-7-2026` or `M31_2026-10-07`. With no dated folder, the newest image's Date modified is used.",
+          "**Calibration and light-frame folders are set aside, not sorted.** Images inside a folder named Light, Lights, Dark, Darks, Dark Flats, Flat, Flats, Bias or Biases (any case, alone or followed by a number or other non-letter, as in `Flats1x20`), or any name starting with Master, stay out of Targets; after sorting you choose Move, Leave or Delete for them. Many capture programs save lights in a `Light` or `LIGHT` folder: move those images up into the object folder, or save them into a folder named for the target, before you sort.",
+          "**Also skipped:** folders whose names contain *astrometry* (plate solves, offered separately), thumbnails, auto-init frames, hidden files (such as Thumbs.db and desktop.ini) and `Targets {year}` folders."
+        ] },
+        { "type": "code", "text": "D:\\Astro\\Captures\\\n  M31\\\n    M31_Light_300s_0001.fits\n    M31_Light_300s_0002.fits\n  2026-10-07\\\n    NGC 7000\\\n      frame_0001.fit\n  DSLR Export\\\n    M45\\\n      IMG_1234.tif\n  M33\\\n    Light\\      (set aside: move these up into M33\\ to sort them)\n    Darks\\      (set aside)\n→ Sort → Targets {year}\\M31\\, Targets 2026\\NGC-7000\\, Targets {year}\\M45\\" }
+      ]
+    },
+    {
+      "title": "4.6 Windows folder names",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "Folder and file names are matched without regard to upper or lower case, as Windows does: `m31` and `M31` are the same object folder.",
+          "Names Windows can't create are made safe: characters such as `< > : \" / \\ | ? *` become a dash, trailing dots and spaces are dropped, and device names such as `CON`, `AUX`, `NUL`, `COM1` or `LPT1` get an underscore added (`CON_`).",
+          "Long paths deeper than 260 characters are supported.",
+          "Read-only files are copied with their read-only setting; deleting an original you agreed to delete works even when it is read-only."
+        ] }
+      ]
+    },
+    {
+      "title": "5. Step by step",
+      "level": 1,
+      "blocks": [
+        { "type": "numbers", "items": [
+          "Copy sessions off the telescope or camera into a Captures folder with File Explorer. From a classic setup, arrange them as in section 4.5.",
+          "Open **Telescope Data Sort** from the Start menu and answer the folder questions (first launch only).",
+          "Press **Choose…** beside **Capture Folder** and pick that folder. The layout is detected and every subfolder is scanned.",
+          "Pick a **Year** and **Month** (or All), and check the **Files to Move**: TIFF, JPG / JPEG, FITS / FIT, or All.",
+          "Under **OK to Delete**, check **JSON** and **Astrometry** if those files may be deleted without asking (see section 7).",
+          "Choose a **Backup**: Off, Zip (.zip), or Tarball (.tar.gz).",
+          "Press **Review file plan** to inspect every file, its target folder and status.",
+          "Press **Sort eligible files**. Name the backup, watch it run, then confirm **Sort now**.",
+          "Watch the copy: each file is copied and checked (section 7). Answer the questions about plate-solve and calibration folders.",
+          "When every move is done, say Yes twice to delete the originals, then Yes twice to delete the processed capture folders — or No to keep them.",
+          "Browse `Targets {year}\\{object}` in File Explorer for stacking and archive."
+        ] },
+        { "type": "figure", "image": "02-review-file-plan", "caption": "Review file plan lists every file grouped by capture folder, with its target folder and status. Nothing has moved yet." }
+      ]
+    },
+    {
+      "title": "6. Backups",
+      "level": 1,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "**Zip or Tarball** — chosen in the **Backup** list. Before it starts you are asked to name it; the suggestion is the objects plus the date and time, e.g. `M31 M27 Backup 2026-10-03 15-27.tar.gz`. A number is added if the name is already used.",
+          "A progress window shows the size and file count done, time elapsed and time left. **Cancel Backup** stops it and removes the partial archive; nothing is moved.",
+          "When the backup finishes you are asked to confirm the sort. If it fails, nothing is moved.",
+          "**Backup Off** — the app still offers **Yes, back up first**, which copies the capture folders into a named folder in Backup Storage, or **No, sort without backup**.",
+          "Archives are written fast (light compression) by the app itself; nothing else needs to be installed. Zip files open in File Explorer, and Windows 11 opens .tar.gz files too. If a backup fails, **Help → Free Zip & Tarball Apps** lists free alternatives."
+        ] },
+        { "type": "figure", "image": "04-backup-progress", "caption": "A named Tarball backup running, with Cancel Backup." }
+      ]
+    },
+    {
+      "title": "7. Sorting: copy, check, then delete",
+      "level": 1,
+      "blocks": [
+        { "type": "paragraph", "text": "Sorting never moves a file in one step. Each file is **copied** into `Targets {year}\\{object}`, the copy is **checked byte for byte** against the original, and only when every move is done are you asked about **deleting** the originals. A progress window shows the strategy, the file being copied, how many are done and the time elapsed; **Stop** ends the copy early and deletes nothing." },
+        { "type": "bullets", "items": [
+          "**Plate solves** (astrometry folders, such as Vespera's `01-pointing-initial`) are not sorted with the images. After the copy you are asked to **Move to Targets**, **Leave** or **Delete** them. Move puts them with their object: `Targets {year}\\{object}\\Plate Solves\\{session}`. Sessions with no object name are listed together for you to name.",
+          "**Calibration folders** (Lights, Darks, Flats, Bias, Master…) are offered the same way: **Move…** to a folder you choose, **Leave** or **Delete**.",
+          "**Delete the originals** — once every move is done you are asked Yes / No, then **Are you sure?** Yes / No. No keeps them; the next scan marks them Duplicate.",
+          "**Delete the processed capture folders** — the Capture Folder is scanned again and the app lists what is left in each processed folder (JSON, plate solves, other files). Again you are asked Yes / No twice. A folder still holding images not in Targets yet is never offered.",
+          "Deleted files and folders go to the Recycle Bin where the drive has one. Network shares and some USB drives have no Recycle Bin; there they are deleted outright, as the questions say.",
+          "Files whose full path is 260 characters or longer can't go to the Recycle Bin. Before any of them would be deleted, a separate question lists them and warns that they would be deleted permanently. **Keep Them** (the default) leaves them, and any folder holding them, where they are; only **Delete Permanently** deletes them."
+        ] }
+      ]
+    },
+    {
+      "title": "7.1 Duplicates",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "**Duplicates** — files already in Targets, byte for byte, are marked *Duplicate*, even when the Targets copy was saved under a number such as `IMG_0001 2.jpg`. **Delete duplicates…** asks Yes / No; the Targets copies are not touched.",
+          "**Remove Identical Copies…** (beside the Target Folder) finds images saved more than once in a `Targets {year}\\{object}` folder by earlier sorts. It lists them by object with the space they take, asks Yes / No twice, compares each copy byte for byte once more, and keeps one copy of each — the un-numbered one when there is one. Files that differ, files with other names, and Plate Solves are never touched."
+        ] }
+      ]
+    },
+    {
+      "title": "7.2 JSON and astrometry files",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "Telescopes leave `.json` session files and plate-solve (astrometry) files in the capture folders. Under **OK to Delete** in the main window, check **JSON** and **Astrometry** to let the app delete folders holding them without asking.",
+          "Unchecked (the default), a pop-up lists how many of each a folder holds, with a checkbox for each. **Delete Checked** deletes only what you checked; **Keep All** keeps the folders.",
+          "**Folders holding any other files** — Affinity Photo, XISF, Siril sequences, notes and so on — are never deleted by clean-up."
+        ] }
+      ]
+    },
+    {
+      "title": "7.3 Finished folders",
+      "level": 2,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "When a capture folder is sorted but still holds images of a type you did not check (for example JPG), you are asked **Delete finished folder?** **Yes** moves the folder and everything left in it to the Recycle Bin, **Sort JPG / JPEG First** checks that type and sorts it, and **No** leaves the folder in Captures."
+        ] },
+        { "type": "figure", "image": "05-finished-folder", "caption": "Delete finished folder? — Yes, sort the remaining type first, or No." }
+      ]
+    },
+    {
+      "title": "8. Safety rules",
+      "level": 1,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "Nothing moves until you confirm the sort.",
+          "Copy, check, then delete: an original is deleted only after its copy is checked byte for byte and you say Yes twice.",
+          "Nothing in Targets is overwritten; a clashing name gets a number.",
+          "`Targets {year}` is never scanned as a capture source.",
+          "The Capture Folder, the Target Folder, Backup Storage and Targets year folders are never removed during clean-up.",
+          "Folders holding files other than images, JSON and plate solves are never deleted.",
+          "Backups copy whole capture folders; they never modify Targets.",
+          "Every deletion asks Yes / No first; deleting originals, processed folders and identical copies asks twice."
+        ] }
+      ]
+    },
+    {
+      "title": "9. Open-source freeware",
+      "level": 1,
+      "blocks": [
+        { "type": "paragraph", "text": "Telescope Data Sort is open-source freeware, and its source code is on GitHub: github.com/rderry/Smart-Telescope-Sort (MIT license). Open it from **Source code on GitHub** in the sidebar or **Help → Source Code on GitHub**. The app first asks for credit, then opens the repository in your browser when you click **Continue**." },
+        { "type": "paragraph", "text": "If you change it and give it away, please give credit to BigSkyAstro: include the BigSkyAstro logo and a link to bigskyastro.com. Credit line: *“Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com”*. The GitHub project keeps the app's earlier name, Smart Telescope Sort." },
+        { "type": "paragraph", "text": "Telescope names identify folder layouts only. Telescope Data Sort is an independent app and is not affiliated with, endorsed by, or created by Vaonis, ZWO, DWARFLAB, Celestron or other telescope makers." }
+      ]
+    },
+    {
+      "title": "10. Help and support",
+      "level": 1,
+      "blocks": [
+        { "type": "bullets", "items": [
+          "Privacy policy: https://bigskyastro.com/privacy",
+          "App page: https://bigskyastro.com/macos/smart-telescope-sort",
+          "Support: https://bigskyastro.com/feedback/smart-telescope-sort · support@bigskyastro.com",
+          "**Credits** (Help menu or the sidebar) lists the people behind the app and its data sources.",
+          "**Help → User Manual (in app)** shows this manual inside the app; **Help → User Manual (PDF)** or F1 opens this PDF."
+        ] }
+      ]
+    }
+  ],
+  "end": "End of manual — Help → User Manual (PDF) or F1 opens this PDF."
+}

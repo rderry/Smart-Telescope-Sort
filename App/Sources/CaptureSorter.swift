@@ -446,6 +446,12 @@ enum CaptureSorter {
         return (entries, years.sorted(by: >), "Targets …")
     }
 
+    /// The rows the window lists: those with files to sort. Rows with none stay in the scan, since they mark capture
+    /// folders a sort emptied or finished, which the app offers to remove.
+    static func rowsToShow(_ entries: [CaptureEntry]) -> [CaptureEntry] {
+        entries.filter { $0.files > 0 }
+    }
+
     private static func entry(
         capture: String,
         object: String,
@@ -482,15 +488,19 @@ enum CaptureSorter {
 
     /// Observation folders at any depth under `root`, whatever the folders above them are called.
     /// Targets {year} folders are not entered, and nothing inside an observation folder is searched again.
+    /// An NN-observation folder straight in `root` is its own capture: the capture can't be `root` itself.
     private static func observationUnits(under root: URL, monitor: ScanMonitor? = nil) -> [ObservationUnit] {
         var units: [ObservationUnit] = []
+        let rootPath = root.standardizedFileURL.path
         func unit(for folder: URL) -> ObservationUnit? {
             let name = folder.lastPathComponent
             if let match = firstMatch(datedObservationCapture, in: name) {
                 return ObservationUnit(capture: folder, observation: folder, object: dsoName(substring(match.range(at: 1), in: name)))
             }
             if let match = firstMatch(observation, in: name) {
-                return ObservationUnit(capture: folder.deletingLastPathComponent(), observation: folder, object: dsoName(substring(match.range(at: 1), in: name)))
+                let parent = folder.deletingLastPathComponent()
+                let capture = parent.standardizedFileURL.path == rootPath ? folder : parent
+                return ObservationUnit(capture: capture, observation: folder, object: dsoName(substring(match.range(at: 1), in: name)))
             }
             return nil
         }
@@ -1252,7 +1262,7 @@ enum CaptureSorter {
         let stamp = ISO8601DateFormatter()
         stamp.formatOptions = [.withFullDate, .withTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
         stamp.timeZone = .current
-        return "SmartTelescopeSort-Backup-\(stamp.string(from: Date()).replacingOccurrences(of: ":", with: "-"))"
+        return "TelescopeDataSort-Backup-\(stamp.string(from: Date()).replacingOccurrences(of: ":", with: "-"))"
     }
 
     /// A name the user typed, made safe for a file name (no slashes, colons or archive extension); blank gives the default.

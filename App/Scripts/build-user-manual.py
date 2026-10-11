@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Build the Smart Telescope Sort user manual PDF (bundled with the app)."""
+"""Build the Telescope Data Sort user manual PDF (bundled with the app)."""
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -26,9 +27,10 @@ from reportlab.platypus import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "Resources" / "Smart-Telescope-Sort-User-Manual.pdf"
+OUT = ROOT / "Resources" / "Telescope-Data-Sort-User-Manual.pdf"
 LOGO = ROOT / "Resources" / "BigSkyAstro-logo.png"
-SHOTS = ROOT.parent / "AppStore" / "Images" / "1.1"
+NOTICE = re.search(r'untestedNotice = "([^"]+)"', (ROOT / "Sources" / "TelescopeKind.swift").read_text()).group(1)
+SHOTS = ROOT.parent / "AppStore" / "Images" / "1.2.1"
 
 NAVY = colors.Color(0.05, 0.09, 0.18)
 INK = colors.Color(0.12, 0.16, 0.24)
@@ -47,6 +49,11 @@ def styles():
         "cover_sub": ParagraphStyle(
             "cover_sub", parent=base["Normal"], fontName="Helvetica",
             fontSize=12, leading=16, textColor=MUTED, alignment=TA_CENTER, spaceAfter=8,
+        ),
+        "notice": ParagraphStyle(
+            "notice", parent=base["Normal"], fontName="Helvetica-Bold",
+            fontSize=12, leading=16, textColor=NAVY, alignment=TA_CENTER,
+            spaceBefore=10, spaceAfter=4,
         ),
         "purpose": ParagraphStyle(
             "purpose", parent=base["Normal"], fontName="Helvetica-Oblique",
@@ -103,7 +110,7 @@ def build():
         str(OUT), pagesize=letter,
         leftMargin=0.75 * inch, rightMargin=0.75 * inch,
         topMargin=0.7 * inch, bottomMargin=0.7 * inch,
-        title="Smart Telescope Sort User Manual",
+        title="Telescope Data Sort User Manual",
         author="BigSkyAstro.com",
     )
 
@@ -113,11 +120,8 @@ def build():
         canvas.setFillColor(MUTED)
         canvas.drawCentredString(
             letter[0] / 2, 0.4 * inch,
-            f"Smart Telescope Sort  ·  © 2026 BigSkyAstro.com  ·  {canvas.getPageNumber()}",
+            f"Telescope Data Sort  ·  Open-source freeware  ·  {canvas.getPageNumber()}",
         )
-        # Footer link
-        canvas.setFillColor(colors.blue)
-        canvas.linkURL("https://BigSkyAstro.com", (letter[0] / 2 - 80, 0.32 * inch, letter[0] / 2 + 80, 0.52 * inch))
         canvas.restoreState()
 
     story = []
@@ -145,25 +149,22 @@ def build():
         logo.drawWidth = 2.6 * inch
         story.append(logo)
         story.append(Spacer(1, 16))
-    story.append(Paragraph("Smart Telescope Sort", s["cover_title"]))
-    story.append(Paragraph("User Manual · Version 1.2", s["cover_sub"]))
-    story.append(Paragraph("macOS 15 or newer · Apple silicon and Intel · Free and open source", s["cover_sub"]))
+    story.append(Paragraph("Telescope Data Sort", s["cover_title"]))
+    story.append(Paragraph("User Manual · Version 1.2.1", s["cover_sub"]))
+    story.append(Paragraph("Formerly Smart Telescope Sort", s["cover_sub"]))
+    story.append(Paragraph("macOS 15 or newer · Apple silicon and Intel · Open-source freeware", s["cover_sub"]))
+    story.append(Paragraph(f"<b>{NOTICE}</b>", s["notice"]))
     story.append(
         Paragraph(
-            '© 2026 <link href="https://BigSkyAstro.com" color="blue"><u>BigSkyAstro.com</u></link>',
-            s["cover_sub"],
-        )
-    )
-    story.append(
-        Paragraph(
-            "Organize TIFF, FITS and JPG captures from several smart-telescope brands into one "
-            "year / object library. The app does not connect to the telescope: you copy "
-            "sessions onto your Mac first, choose that Captures folder, and the app recognizes "
-            "the folder layout for you.",
+            "Organize TIFF, FITS and JPG captures into one year / object library: from smart "
+            "telescopes, and from any other telescope or camera, including classic setups, when "
+            "the files are in folders named for the object. The app does not connect to the "
+            "telescope: you copy sessions onto your Mac first, choose that Captures folder, and "
+            "the app recognizes smart-telescope folder layouts for you.",
             s["purpose"],
         )
     )
-    figure("01-layout-detected", "The main window: the folder layout is detected, and every capture folder is "
+    figure("01-main", "The main window: the folder layout is detected, and every capture folder is "
            "listed with its object, file count and destination before anything moves.")
     story.append(PageBreak())
 
@@ -171,7 +172,11 @@ def build():
     story.append(Paragraph("1. Assumptions (read this first)", s["h1"]))
     story.append(bullets([
         "<b>You already moved files off the scope</b> (USB, FTP, or Wi-Fi). The app never talks "
-        "to Vaonis, Seestar, DWARF, or Origin hardware.",
+        "to a telescope, camera, or capture program.",
+        "<b>Any telescope or camera works.</b> Smart-telescope layouts (Vespera, Stellina, "
+        "Seestar, DWARF, Origin) are detected. Images from any other telescope or camera, "
+        "including classic setups, are sorted when they sit in a folder named for the object. "
+        "See <b>4.5 Using data from other telescopes</b>.",
         "<b>One brand per Captures folder.</b> The layout is detected from the folder you choose. "
         "Do not mix Seestar albums and Vaonis dated sessions in the same Captures folder.",
         "<b>You choose the file types:</b> TIFF, JPG / JPEG, FITS / FIT, or All. TIFF and FITS "
@@ -184,7 +189,8 @@ def build():
         "object name are listed together so you can name them all at once.",
         "<b>Year</b> comes from dated folder names when present; otherwise from the newest "
         "image file’s modification date.",
-        "<b>Object name</b> is decoded from observation / album / object folder names.",
+        "<b>Object name</b> is decoded from observation / album / object folder names: the "
+        "nearest folder whose name holds a catalog number (M31, NGC 7000…) or a solar-system name.",
         "<b>Nothing is overwritten.</b> If Targets already holds a different file with the same "
         "name, the new copy gets a number (<font face='Courier'>IMG_0001 2.jpg</font>). Only "
         "byte-identical copies count as duplicates, including copies saved under a number.",
@@ -208,7 +214,10 @@ def build():
     story.append(Paragraph("1.2 What the app does not do", s["h2"]))
     story.append(bullets([
         "It does not stack, stretch, or post-process images.",
-        "It does not support Unistellar in this version.",
+        "It does not convert files. Each file is copied unchanged, in its own format.",
+        "It does not sort camera RAW files (CR2, CR3, NEF, ARW, DNG), video (SER, AVI), XISF, "
+        "or PNG, and it does not read FITS headers or EXIF.",
+        "It does not recognize Unistellar's own folder layout in this version.",
         "It does not invent missing object names — if a folder has no usable name, "
         "the object label may be the parent folder name.",
     ], s["bullet"]))
@@ -257,10 +266,12 @@ def build():
     layouts = [Paragraph("3. Detected folder layouts", s["h1"])]
     layouts.append(
         Paragraph(
-            "Telescope names identify folder layouts only. Smart Telescope Sort is an independent "
+            "Telescope names identify folder layouts only. Telescope Data Sort is an independent "
             "app and is not affiliated with, endorsed by, or created by those manufacturers. "
             "The detected layout is shown under the title, for example "
-            "<i>Dated session folders · detected</i>.",
+            "<i>Dated session folders · detected</i>. When no smart-telescope layout is found it "
+            "reads <i>Folders from any telescope or camera</i>. Every layout is sorted the same way, "
+            "so the label never changes where files go.",
             s["body"],
         )
     )
@@ -270,7 +281,8 @@ def build():
         ["Object album folders", "S30, S30 Pro, S50", "M31/, NGC253/ (or a USB dump of albums)"],
         ["Session folders", "DWARF 3, II, mini", "20260907_DWARF3_session/M33/"],
         ["Object-and-date folders", "Origin Mark II", "M31_2026-09-05/"],
-    ], colWidths=[1.7 * inch, 1.5 * inch, 3.6 * inch])
+        ["Object folders", "Any other, incl. classic", "M31/, 2026-10-07/NGC 7000/ (see 4.5)"],
+    ], colWidths=[1.7 * inch, 1.7 * inch, 3.4 * inch])
     t.setStyle(TableStyle([
         ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 9),
         ("FONT", (0, 1), (-1, -1), "Helvetica", 9),
@@ -365,11 +377,75 @@ def build():
         s["code"],
     ))
 
+    story.append(Paragraph("4.5 Using data from other telescopes", s["h2"]))
+    story.append(
+        Paragraph(
+            "Telescope Data Sort works with images from any telescope or camera, including "
+            "classic setups: a dedicated astronomy camera or a DSLR on any telescope, captured with "
+            "programs such as ASIAIR, NINA or SharpCap, or exported from a DSLR as TIFF. The app "
+            "reads only folder names and file dates, so these files sort when they are arranged "
+            "as follows.",
+            s["body"],
+        )
+    )
+    story.append(bullets([
+        "<b>File types:</b> TIFF (<font face='Courier'>.tif, .tiff</font>) and FITS "
+        "(<font face='Courier'>.fit, .fits</font>) are sorted by default; JPG "
+        "(<font face='Courier'>.jpg, .jpeg</font>) when you check it. Upper or lower case "
+        "doesn't matter. Other files, including camera RAW, video, XISF, PNG and "
+        "<font face='Courier'>.fts</font>, are not sorted. Files are copied unchanged; "
+        "nothing is converted.",
+        "<b>Object:</b> put the images in a folder named for the object, or below one. The "
+        "nearest folder whose name holds a catalog number (M, NGC, IC, Sh2, B / Barnard, LDN, "
+        "LBN, vdB, Abell, Arp, Mel, Cr / Collinder, UGC, PGC, C / Caldwell, followed by a number) "
+        "or the Moon, Sun, a planet or a comet names the object. The folder's whole name, "
+        "without dates, becomes the object folder in capitals with dashes for spaces: "
+        "<font face='Courier'>NGC 7000</font> becomes <font face='Courier'>NGC-7000</font>, "
+        "<font face='Courier'>M31 Andromeda</font> becomes "
+        "<font face='Courier'>M31-ANDROMEDA</font>. Name the folder just the object.",
+        "<b>No object folder?</b> Those images are listed together before sorting so you can "
+        "name them; the date is filled in as the suggestion.",
+        "<b>Year:</b> from the nearest folder name with a date, at or above the images: "
+        "<font face='Courier'>2026-10-07</font> (a time such as "
+        "<font face='Courier'>_22-15-03</font> may follow), <font face='Courier'>20261007</font>, "
+        "<font face='Courier'>10-7-2026</font> or <font face='Courier'>M31_2026-10-07</font>. "
+        "With no dated folder, the newest image's modification date is used.",
+        "<b>Calibration and light-frame folders are set aside, not sorted.</b> Images inside a "
+        "folder named Light, Lights, Dark, Darks, Dark Flats, Flat, Flats, Bias or Biases (any "
+        "case, alone or followed by a number or other non-letter, as in "
+        "<font face='Courier'>Flats1x20</font>), or any name starting with Master, stay out of "
+        "Targets; after sorting you choose Move, Leave or Delete for them. Many capture programs "
+        "save lights in a <font face='Courier'>Light</font> or <font face='Courier'>LIGHT</font> "
+        "folder: move those images up into the object folder, or save them into a folder "
+        "named for the target, before you sort.",
+        "<b>Also skipped:</b> folders whose names contain <i>astrometry</i> (plate solves, "
+        "offered separately), thumbnails, auto-init frames, hidden files and "
+        "<font face='Courier'>Targets {year}</font> folders.",
+    ], s["bullet"]))
+    story.append(code_block(
+        "Captures/\n"
+        "  M31/\n"
+        "    M31_Light_300s_0001.fits\n"
+        "    M31_Light_300s_0002.fits\n"
+        "  2026-10-07/\n"
+        "    NGC 7000/\n"
+        "      frame_0001.fit\n"
+        "  DSLR Export/\n"
+        "    M45/\n"
+        "      IMG_1234.tif\n"
+        "  M33/\n"
+        "    Light/      (set aside: move these up into M33/ to sort them)\n"
+        "    Darks/      (set aside)\n"
+        "→ Sort → Targets {year}/M31/, Targets 2026/NGC-7000/, Targets {year}/M45/",
+        s["code"],
+    ))
+
     # 5 Workflow
     story.append(Paragraph("5. Step by step", s["h1"]))
     story.append(bullets([
-        "Copy sessions off the telescope into a Captures folder.",
-        "Open <b>Smart Telescope Sort</b> and answer the folder questions (first launch only).",
+        "Copy sessions off the telescope or camera into a Captures folder. From a classic "
+        "setup, arrange them as in section 4.5.",
+        "Open <b>Telescope Data Sort</b> and answer the folder questions (first launch only).",
         "Press <b>Choose…</b> beside <b>Capture Folder</b> and pick that folder. The layout is "
         "detected and every subfolder is scanned.",
         "Pick a <b>Year</b> and <b>Month</b> (or All), and check the <b>Files to Move</b>: "
@@ -473,7 +549,7 @@ def build():
         "<b>Sort JPG / JPEG First</b> checks that type and sorts it, and <b>No</b> leaves the "
         "folder in Captures.",
     ], s["bullet"]))
-    figure("05-finished-folder", "Delete finished folder? — Yes, sort the remaining type first, or No.",
+    figure("06-finished-folder", "Delete finished folder? — Yes, sort the remaining type first, or No.",
            width=5.6 * inch)
 
     # 8 Safety
@@ -493,10 +569,10 @@ def build():
     ], s["bullet"]))
 
     # 9 Open source
-    story.append(Paragraph("9. Free and open source", s["h1"]))
+    story.append(Paragraph("9. Open-source freeware", s["h1"]))
     story.append(
         Paragraph(
-            "Smart Telescope Sort is free, and its source code is on GitHub: "
+            "Telescope Data Sort is open-source freeware, and its source code is on GitHub: "
             '<link href="https://github.com/rderry/Smart-Telescope-Sort" color="blue">'
             "<u>github.com/rderry/Smart-Telescope-Sort</u></link>. Open it from <b>Source code on "
             "GitHub</b> (with the GitHub logo) in the sidebar or <b>Help → Source Code on GitHub</b>. The app first asks "
@@ -509,7 +585,8 @@ def build():
             "If you change it and give it away, please give credit to BigSkyAstro: include the "
             "BigSkyAstro logo and a link to "
             '<link href="https://bigskyastro.com" color="blue"><u>bigskyastro.com</u></link>. '
-            "Credit line: <i>“Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com”</i>.",
+            "Credit line: <i>“Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com”</i>. "
+            "The GitHub project keeps the app's earlier name, Smart Telescope Sort.",
             s["body"],
         )
     )
@@ -519,12 +596,14 @@ def build():
         "Privacy policy: https://bigskyastro.com/privacy",
         "App page: https://bigskyastro.com/macos/smart-telescope-sort",
         "Support: https://bigskyastro.com/feedback/smart-telescope-sort · support@bigskyastro.com",
+        "<b>Credits</b> (Telescope Data Sort menu, Help menu, or the sidebar) lists the people "
+        "behind the app and its data sources.",
     ], s["bullet"]))
 
     story.append(Spacer(1, 14))
     story.append(
         Paragraph(
-            "End of manual — Help → Smart Telescope Sort User Manual (Shift-Command-/) opens this PDF.",
+            "End of manual — Help → Telescope Data Sort User Manual (Shift-Command-/) opens this PDF.",
             s["caption"],
         )
     )

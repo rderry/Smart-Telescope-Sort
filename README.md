@@ -1,80 +1,112 @@
-<p align="center">
-  <a href="https://bigskyastro.com"><img src="docs/bigskyastro-banner.jpg" alt="BigSkyAstro" width="820"></a>
-</p>
+# Telescope Data Sort
 
-<img src="App/Icons/AppIcon-source.png" alt="Smart Telescope Sort icon" width="128" align="right">
+Formerly **Smart Telescope Sort** (renamed in 1.2.1). The GitHub repository, this folder, the bundle ID
+`com.derry.SmartTelescopeSort`, the executable name and saved settings keep the earlier name, so upgrades keep each
+user's settings.
 
-# Smart Telescope Sort
+Separate build from **Vespera Sort program** (Data Files). Lives on Large Drive so the Vaonis-only app stays untouched.
 
-[![Open Source](https://img.shields.io/badge/open%20source-yes-brightgreen)](LICENSE)
-[![License: MIT with attribution](https://img.shields.io/badge/license-MIT%20with%20attribution-blue)](LICENSE)
-[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-lightgrey)](#build)
-[![BigSkyAstro](https://img.shields.io/badge/by-BigSkyAstro-1f3a68)](https://bigskyastro.com)
+Sorts TIFF, FITS and JPG captures into `Targets {year}/{object}/`: from smart telescopes, and from any other telescope or camera, including classic setups, when the files are arranged as described in [Using data from other telescopes](#using-data-from-other-telescopes).
 
-Free, open-source macOS app from [BigSkyAstro](https://bigskyastro.com) that copies smart-telescope captures from a download folder into `Targets {year}/{object}`, checks each copy, and deletes the originals only after you confirm.
+## Location
 
-## Credit BigSkyAstro
+`/Volumes/Large Drive/Smart Telescope Sort program/`
 
-**If you modify and distribute this app, in source or binary form, please give credit to BigSkyAstro: include the BigSkyAstro logo ([`docs/bigskyastro-banner.jpg`](docs/bigskyastro-banner.jpg)) and a link to our web page: [https://bigskyastro.com](https://bigskyastro.com).**
+## Supported data (layout detected automatically since 1.1)
 
-A credit line such as this is enough:
+There is no telescope type to pick. The app detects the folder layout of the Capture Folder each time the preview refreshes and shows it under the window title. The label never changes where files go: every layout is sorted the same way.
 
-> Based on Smart Telescope Sort by BigSkyAstro — https://bigskyastro.com
+| Detected layout | Telescopes | Put files here |
+|------|--------|----------------|
+| **Dated session folders** | Vespera / Stellina | FTP `User/` dated sessions into Captures |
+| **Object album folders** | Seestar S30 / S30 Pro / S50 | USB / Wi‑Fi / FIT export → object albums in Captures |
+| **Session folders** | DWARF 3 / II / mini | USB or FTP session folders into Captures |
+| **Object and date folders** | Celestron Origin Mark II | Raw FITS folders (object+date) via USB stick or FTP into Captures |
+| **Folders from any telescope or camera** | Any other, including classic setups | Folders named for the object (see below) |
 
-The [LICENSE](LICENSE) makes this credit a condition of redistribution.
+Destination for all of them: `{Target Folder}/Targets {year}/{object}/`.
 
-## What it does
+Telescope names identify folder layouts only. Telescope Data Sort is an independent app and is not affiliated with, endorsed by, or created by those manufacturers.
 
-- Detects the capture layout from your Captures folder: dated session folders, object albums, session folders, or object-and-date folders.
-- Asks once where your Original Targets, Processing Targets and Backup Storage folders live, with an option to save each as the default.
-- Lets you choose which files to sort: TIFF, JPG/JPEG, FITS/FIT, or all of them.
-- Before sorting, can back up the capture folders as a zip or tarball using the archiver built into macOS. There is nothing extra to install.
-- Lists every file in a review window, with its object, date and target folder, before anything is copied.
-- Asks you to name each backup and shows its progress, with a Cancel button.
-- Copies each file into Targets, checks the copy byte for byte, and deletes the original only after every copy has succeeded and you say Yes twice.
-- Never overwrites a file already in Targets. Only a byte-identical copy counts as a duplicate.
-- Remove Identical Copies lists repeated copies already in Targets and asks twice before moving the extras to the Trash.
-- After a sort, asks twice before deleting a finished capture folder, and leaves any folder that still holds files it does not recognize.
-- On first launch, asks you to accept the terms once. Help → Terms Acceptance Record shows when you agreed.
-- The Source code on GitHub link asks for this credit, showing the logo and the bigskyastro.com link, then opens this repository when you click Continue.
+## Using data from other telescopes
 
-Independent app. Not affiliated with or created by telescope manufacturers. Model names in the source identify folder layouts only. A modified build should keep the product name free of those trademarks.
+Images from any telescope or camera sort, including a classic setup with a dedicated astronomy camera or a DSLR, captured with programs such as ASIAIR, NINA or SharpCap, or exported from a DSLR as TIFF. The app reads only folder names and file dates (never FITS headers or EXIF), so the files must be arranged like this:
 
-The Mac App Store edition is signed and distributed separately. A build from this repository is your own local copy.
+1. **File types.** TIFF (`.tif`, `.tiff`) and FITS (`.fit`, `.fits`) are sorted by default; JPG (`.jpg`, `.jpeg`) when checked under Files to Move. Case doesn't matter. Nothing else is sorted: no camera RAW (CR2, CR3, NEF, ARW, DNG), video (SER, AVI), XISF, PNG or `.fts`. Files are copied unchanged; nothing is converted.
+2. **Object from a folder name.** The nearest folder at or above the images whose name holds a catalog number (M, NGC, IC, Sh2, B/Barnard, LDN, LBN, vdB, Abell, Arp, Mel, Cr/Collinder, UGC, PGC, C/Caldwell + a number) or Moon, Sun, a planet or "comet" names the object. Its whole name, without dates, becomes the object folder in capitals with dashes for spaces: `NGC 7000` → `NGC-7000`, `M31 Andromeda` → `M31-ANDROMEDA`. Name the folder just the object.
+3. **No object folder?** Those images are listed together before sorting so you can name them; the date is offered as the name.
+4. **Year from a folder name, else the file date.** The nearest folder at or above the images named `2026-10-07` (optionally `_22-15-03`), `20261007`, `10-7-2026` or `Object_2026-10-07` gives the date; otherwise the newest image's modification date is used.
+5. **Light and calibration folders are set aside, not sorted.** Images inside a folder named `Light`, `Lights`, `Dark`, `Darks`, `Dark Flats`, `Flat`, `Flats`, `Bias` or `Biases` (any case, alone or followed by a non-letter, e.g. `Flats1x20`), or any name starting with `Master`, stay out of Targets; after sorting you choose Move, Leave or Delete for them. Capture programs that save lights in a `Light/` folder need those images moved up into the object folder first.
+6. **Also skipped:** folders with *astrometry* in the name (plate solves, offered separately), thumbnails, auto-init frames, hidden files and `Targets {year}` folders.
+
+Example:
+
+```text
+Captures/
+  M31/
+    M31_Light_300s_0001.fits
+    M31_Light_300s_0002.fits
+  2026-10-07/
+    NGC 7000/
+      frame_0001.fit
+  DSLR Export/
+    M45/
+      IMG_1234.tif
+  M33/
+    Light/      (set aside: move these up into M33/ to sort them)
+    Darks/      (set aside)
+→ Targets {year}/M31/, Targets 2026/NGC-7000/, Targets {year}/M45/
+```
+
+`App/Tests/run-tests.sh` checks these rules against classic layouts like this one.
 
 ## Build
 
-Requires Xcode command-line tools.
-
 ```bash
-cd App
+cd "/Volumes/Large Drive/Smart Telescope Sort program/App"
 chmod +x build-app.sh
 ./build-app.sh
 ```
 
-The app is written next to the `App` folder as `Smart Telescope Sort.app`. The script builds a universal binary (Apple silicon and Intel) for macOS 15 or newer and ad-hoc signs it. You do not need an Apple Developer certificate to run your own changes.
+Opens as `Telescope Data Sort.app` next to `App/`.
 
-Rebuild the bundled manual with:
+Tests (sorting rules for classic and calibration layouts):
 
 ```bash
-python3 App/Scripts/build-user-manual.py
+App/Tests/run-tests.sh
 ```
 
-That script needs `reportlab`.
+## Windows (1.2.1.0)
 
-## Try it
+The Windows 11 version (WPF, .NET 8) is in `Windows/`: `SmartTelescopeSort.Core` (sorting rules shared with the Mac
+golden tree), `SmartTelescopeSort.App`, `SmartTelescopeSort.Cli` and `tests/SmartTelescopeSort.Core.Tests`.
 
-`Demo Captures/` holds placeholder files, not real images. In the app, set Source Captures to one brand folder, such as `Demo Captures/Seestar`, then press Review file plan.
+```bash
+dotnet test Windows/SmartTelescopeSort.sln
+```
 
-| Folder | Layout |
-|--------|--------|
-| `Vaonis/` | Dated session folders |
-| `Seestar/` | Object album folders |
-| `DWARF/` | Session folders |
-| `Origin/` | Object and date folders |
+Microsoft Store packages are built on Windows with `Windows/installer/package-store.ps1`.
 
-## License
+## Demo Captures
 
-Open source under the MIT License, with an attribution requirement. See [LICENSE](LICENSE).
+Placeholder post-transfer trees (not real images):
 
-Copyright (c) 2026 [BigSkyAstro](https://bigskyastro.com).
+`/Volumes/Large Drive/Smart Telescope Sort program/Demo Captures/`
+
+| Folder | Detected layout | What’s inside |
+|--------|--------------------|---------------|
+| `Vaonis/` | Dated session folders | 4 sessions (M31×2, NGC7023, plan Demo_Night) |
+| `Seestar/` | Object album folders | 4 dumps (USB, Wi-Fi, M45 album, S50) |
+| `DWARF/` | Session folders | 4 sessions (DWARF 3, FTP, II, mini) |
+| `Origin/` | Object and date folders | 4 sets (3 object+date + USB dump) |
+
+Choose a brand subfolder (e.g. `…/Demo Captures/Seestar`) as the **Capture Folder** to see that layout detected. Choosing the `Demo Captures` parent also works: every subfolder is scanned in one pass, and the label shows the most common layout.
+
+## Note
+
+User manual (Help → Telescope Data Sort User Manual / ⇧⌘/) covers assumptions, per-brand offload,
+using data from other telescopes, `Targets {year}/{DSO}` for all scopes, Demo Captures, and Review file plan. Rebuild PDF with:
+
+`python3 App/Scripts/build-user-manual.py`
+
+Unistellar's own folder layout isn't recognized in this build.

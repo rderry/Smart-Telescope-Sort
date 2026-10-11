@@ -1,12 +1,13 @@
 #!/bin/bash
-# Processor-sensitive installer for Smart Telescope Sort (macOS 15).
+# Processor-sensitive installer for Telescope Data Sort (macOS 15).
 # Installs only the matching CPU build, then asks where to place the user manual PDF.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PAYLOADS="$HERE/Payloads"
-APP_NAME="Smart Telescope Sort.app"
-MANUAL_PDF="$HERE/Smart-Telescope-Sort-User-Manual.pdf"
+APP_NAME="Telescope Data Sort.app"
+OLD_APP_NAME="Smart Telescope Sort.app"
+MANUAL_PDF="$HERE/Telescope-Data-Sort-User-Manual.pdf"
 DEST="/Applications"
 
 detect_cpu() {
@@ -57,10 +58,10 @@ set question to display dialog "This Mac is $cpu_label.
 
 Only the matching processor build will be installed (the other CPU build in this package is ignored).
 
-Install Smart Telescope Sort into /Applications?
-Any existing copy with the same name will be replaced.
+Install Telescope Data Sort into /Applications?
+Any existing copy with the same name will be replaced, and a copy under the app's earlier name (Smart Telescope Sort) is moved to the Trash. Your settings are kept.
 
-After the app is installed you will choose where to save the User Manual PDF." buttons {"Cancel", "Install"} default button "Install" with title "Smart Telescope Sort installer"
+After the app is installed you will choose where to save the User Manual PDF." buttons {"Cancel", "Install"} default button "Install" with title "Telescope Data Sort installer"
 if button returned of question is "Install" then
   return "install"
 else
@@ -94,11 +95,20 @@ if [[ "$installed_arch" != *"$arch"* ]]; then
   exit 1
 fi
 
+OLD_APP="$DEST/$OLD_APP_NAME"
+if [[ -d "$OLD_APP" ]]; then
+  if osascript -e "tell application \"Finder\" to delete (POSIX file \"$OLD_APP\" as alias)" >/dev/null 2>&1; then
+    echo "Moved the earlier $OLD_APP_NAME to the Trash."
+  else
+    echo "Could not move $OLD_APP to the Trash; remove it yourself if you no longer need it." >&2
+  fi
+fi
+
 pdf_note="skipped"
 if [[ -f "$MANUAL_PDF" ]]; then
   pdf_dest="$(osascript <<'EOF' 2>/dev/null || true
 try
-  set theFolder to choose folder with prompt "Where should the Smart Telescope Sort User Manual PDF be saved?" default location (path to documents folder)
+  set theFolder to choose folder with prompt "Where should the Telescope Data Sort User Manual PDF be saved?" default location (path to documents folder)
   return POSIX path of theFolder
 on error
   return ""
@@ -108,9 +118,9 @@ EOF
   pdf_dest="${pdf_dest%$'\r'}"
   pdf_dest="${pdf_dest%/}"
   if [[ -n "${pdf_dest:-}" && -d "$pdf_dest" ]]; then
-    cp "$MANUAL_PDF" "$pdf_dest/Smart-Telescope-Sort-User-Manual.pdf"
-    xattr -cr "$pdf_dest/Smart-Telescope-Sort-User-Manual.pdf" 2>/dev/null || true
-    pdf_note="$pdf_dest/Smart-Telescope-Sort-User-Manual.pdf"
+    cp "$MANUAL_PDF" "$pdf_dest/Telescope-Data-Sort-User-Manual.pdf"
+    xattr -cr "$pdf_dest/Telescope-Data-Sort-User-Manual.pdf" 2>/dev/null || true
+    pdf_note="$pdf_dest/Telescope-Data-Sort-User-Manual.pdf"
     echo "Manual PDF saved -> $pdf_note"
   else
     echo "PDF placement skipped by user."
@@ -131,7 +141,7 @@ App: $TARGET
 User Manual PDF:
 $pdf_note
 
-(The PDF is also inside the app — Help → Smart Telescope Sort User Manual.)" buttons {"OK"} default button "OK" with title "Install complete"
+(The PDF is also inside the app — Help → Telescope Data Sort User Manual.)" buttons {"OK"} default button "OK" with title "Install complete"
 EOF
 
 echo "Done: $TARGET ($installed_arch)"

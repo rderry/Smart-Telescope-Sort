@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>sts-check</AssemblyName>
+    <RootNamespace>SmartTelescopeSort.Cli</RootNamespace>
+    <Version>1.2.1</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/._*</DefaultItemExcludes>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SmartTelescopeSort.Core\SmartTelescopeSort.Core.csproj" />
+  </ItemGroup>
+</Project>

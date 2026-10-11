@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Smart Telescope Sort for macOS 15 — Apple Silicon + Intel —
+# Build Telescope Data Sort for macOS 15 — Apple Silicon + Intel —
 # then pack a zip whose installer picks the matching CPU.
 # Does NOT publish to APP INSTALLS (hold for review).
 set -euo pipefail
@@ -10,9 +10,9 @@ ICONS="$ROOT/App/Icons"
 PLIST="$ROOT/App/Info-macOS15.plist"
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
 DIST="$ROOT/Dist/macOS15"
-STAGE="$DIST/staging/Smart-Telescope-Sort-macOS15-Installer"
+STAGE="$DIST/staging/Telescope-Data-Sort-macOS15-Installer"
 PAYLOADS="$STAGE/Payloads"
-ZIP_OUT="$DIST/Smart-Telescope-Sort-macOS15-Installer.zip"
+ZIP_OUT="$DIST/Telescope-Data-Sort-macOS15-Installer.zip"
 MIN_OS="15.0"
 ICON_VARIANT="OS15"
 
@@ -21,6 +21,8 @@ SOURCES=(
   "$SRC/CaptureSorter.swift"
   "$SRC/LibraryFolders.swift"
   "$SRC/AgreementRecord.swift"
+  "$SRC/Credits.swift"
+  "$SRC/CreditsView.swift"
   "$SRC/ContentView.swift"
   "$SRC/SmartTelescopeSortApp.swift"
 )
@@ -33,14 +35,14 @@ if [[ ! -f "$PLIST" ]]; then
   echo "Missing $PLIST" >&2
   exit 1
 fi
-if [[ ! -f "$ROOT/App/Resources/Smart-Telescope-Sort-User-Manual.pdf" ]]; then
+if [[ ! -f "$ROOT/App/Resources/Telescope-Data-Sort-User-Manual.pdf" ]]; then
   python3 "$ROOT/App/Scripts/build-user-manual.py"
 fi
 
 build_one() {
   local arch="$1"
   local target="${arch}-apple-macos${MIN_OS}"
-  local app="$PAYLOADS/${arch}/Smart Telescope Sort.app"
+  local app="$PAYLOADS/${arch}/Telescope Data Sort.app"
   local macos="$app/Contents/MacOS"
   local resources="$app/Contents/Resources"
   local bin="$macos/SmartTelescopeSort"
@@ -49,8 +51,8 @@ build_one() {
   mkdir -p "$macos" "$resources"
   cp "$PLIST" "$app/Contents/Info.plist"
   cp "$ICONS/AppIcon-${ICON_VARIANT}.icns" "$resources/AppIcon.icns"
-  cp "$ROOT/App/Resources/Smart-Telescope-Sort-User-Manual.pdf" \
-    "$resources/Smart-Telescope-Sort-User-Manual.pdf"
+  cp "$ROOT/App/Resources/Telescope-Data-Sort-User-Manual.pdf" \
+    "$resources/Telescope-Data-Sort-User-Manual.pdf"
   cp "$ROOT/App/Resources/BigSkyAstro-logo.png" "$resources/BigSkyAstro-logo.png"
   cp "$ROOT/App/Resources/GitHub-logo.png" "$resources/GitHub-logo.png"
 
@@ -78,24 +80,24 @@ build_one arm64
 build_one x86_64
 
 HOST_ARCH="$(uname -m)"
-HOST_APP="$ROOT/Smart Telescope Sort macOS15.app"
+HOST_APP="$ROOT/Telescope Data Sort macOS15.app"
 rm -rf "$HOST_APP"
-ditto "$PAYLOADS/${HOST_ARCH}/Smart Telescope Sort.app" "$HOST_APP"
+ditto "$PAYLOADS/${HOST_ARCH}/Telescope Data Sort.app" "$HOST_APP"
 echo "Host smoke copy: $HOST_APP"
 
 cp "$ROOT/App/macos15-installer/Install.command" "$STAGE/Install.command"
 cp "$ROOT/App/macos15-installer/README.txt" "$STAGE/README.txt"
-cp "$ROOT/App/Resources/Smart-Telescope-Sort-User-Manual.pdf" \
-  "$STAGE/Smart-Telescope-Sort-User-Manual.pdf"
+cp "$ROOT/App/Resources/Telescope-Data-Sort-User-Manual.pdf" \
+  "$STAGE/Telescope-Data-Sort-User-Manual.pdf"
 chmod +x "$STAGE/Install.command"
 
 rm -f "$ZIP_OUT"
 (
   cd "$DIST/staging"
   if command -v ditto >/dev/null; then
-    ditto -c -k --sequesterRsrc --keepParent "Smart-Telescope-Sort-macOS15-Installer" "$ZIP_OUT"
+    ditto -c -k --sequesterRsrc --keepParent "Telescope-Data-Sort-macOS15-Installer" "$ZIP_OUT"
   else
-    zip -r -X "$ZIP_OUT" "Smart-Telescope-Sort-macOS15-Installer"
+    zip -r -X "$ZIP_OUT" "Telescope-Data-Sort-macOS15-Installer"
   fi
 )
 
