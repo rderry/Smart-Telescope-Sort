@@ -3,6 +3,8 @@
 # stages demo folders on the Large Drive scratch area, and captures 2880x1800 screenshots.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=../macos-bundle.sh
+source "$ROOT/App/macos-bundle.sh"
 SRC="$ROOT/App/Sources"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/App/Info-macOS15.plist")"
 OUT="$ROOT/AppStore/Images/$VERSION"
@@ -16,10 +18,13 @@ rm -rf "$SCRATCH" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$
 cp "$ROOT/App/Info-macOS15.plist" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.derry.SmartTelescopeSort.screenshots" "$APP/Contents/Info.plist"
 cp "$ROOT/App/Icons/AppIcon.icns" "$ROOT/App/Resources/BigSkyAstro-logo.png" "$ROOT/App/Resources/GitHub-logo.png" "$APP/Contents/Resources/"
+info_plist_ldflags "$APP/Contents/Info.plist"
 xcrun swiftc -sdk "$SDK" -target "$(uname -m)-apple-macos15.0" -parse-as-library -O -D SCREENSHOTS \
+  "${INFO_PLIST_LDFLAGS[@]}" \
   "$SRC"/*.swift "$ROOT/App/Screenshots/ScreenshotMode.swift" \
   -o "$APP/Contents/MacOS/SmartTelescopeSort" -framework SwiftUI -framework AppKit -framework IOKit
-codesign --force --sign - "$APP" >/dev/null 2>&1
+compile_asset_catalog "$APP" "$ROOT/App/Assets.xcassets" "$SCRATCH/actool-partial.plist" "15.0"
+sign_adhoc_plain "$APP"
 
 stage_captures() {
   rm -rf "$DEMO/Captures"

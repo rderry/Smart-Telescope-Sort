@@ -1,6 +1,7 @@
 #!/bin/bash
 # Processor-sensitive installer for Telescope Data Sort (macOS 15).
-# Installs only the matching CPU build, then asks where to place the user manual PDF.
+# Installs the matching CPU build into /Applications, including over the
+# App Store-named bundle that AMFI was refusing to launch.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -10,30 +11,27 @@ OLD_APP_NAME="Smart Telescope Sort.app"
 MANUAL_PDF="$HERE/Telescope-Data-Sort-User-Manual.pdf"
 DEST="/Applications"
 
-detect_cpu() {
-  local hw_arm translated uname_m
+if [[ -f "$HERE/macos-bundle.sh" ]]; then
+  # shellcheck source=../macos-bundle.sh
+  source "$HERE/macos-bundle.sh"
+elif [[ -f "$HERE/../macos-bundle.sh" ]]; then
+  # shellcheck source=../macos-bundle.sh
+  source "$HERE/../macos-bundle.sh"
+else
+  echo "Missing macos-bundle.sh next to Install.command." >&2
+  exit 1
+fi
 
-  hw_arm="$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)"
-  if [[ "$hw_arm" == "1" ]]; then
-    echo "arm64"
-    return
-  fi
+if [[ -f "$HERE/Entitlements-Local.plist" ]]; then
+  ENT_LOCAL="$HERE/Entitlements-Local.plist"
+elif [[ -f "$HERE/../Entitlements-Local.plist" ]]; then
+  ENT_LOCAL="$HERE/../Entitlements-Local.plist"
+else
+  echo "Missing Entitlements-Local.plist next to Install.command." >&2
+  exit 1
+fi
 
-  translated="$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)"
-  if [[ "$translated" == "1" ]]; then
-    echo "arm64"
-    return
-  fi
-
-  uname_m="$(uname -m)"
-  case "$uname_m" in
-    arm64) echo "arm64" ;;
-    x86_64|i386|i686) echo "x86_64" ;;
-    *) echo "unknown:$uname_m" ;;
-  esac
-}
-
-arch="$(detect_cpu)"
+arch="$(detect_mac_cpu)"
 case "$arch" in
   arm64) cpu_label="Apple Silicon (arm64)" ;;
   x86_64) cpu_label="Intel (x86_64)" ;;
@@ -58,8 +56,8 @@ set question to display dialog "This Mac is $cpu_label.
 
 Only the matching processor build will be installed (the other CPU build in this package is ignored).
 
-Install Telescope Data Sort into /Applications?
-Any existing copy with the same name will be replaced, and a copy under the app's earlier name (Smart Telescope Sort) is moved to the Trash. Your settings are kept.
+Install the local test build into /Applications?
+This replaces Telescope Data Sort and \"Smart Telescope Sort (App Store)\" with a developer-signed local test copy (not an App Store install). A copy under the earlier name Smart Telescope Sort is moved to the Trash. Your settings are kept.
 
 After the app is installed you will choose where to save the User Manual PDF." buttons {"Cancel", "Install"} default button "Install" with title "Telescope Data Sort installer"
 if button returned of question is "Install" then
@@ -80,18 +78,28 @@ if [[ ! -d "$DEST" ]]; then
   mkdir -p "$DEST"
 fi
 
-TARGET="$DEST/$APP_NAME"
-echo "Installing $cpu_label build -> $TARGET"
-rm -rf "$TARGET"
-ditto "$SRC" "$TARGET"
-
-xattr -cr "$TARGET" 2>/dev/null || true
-codesign --force --deep --sign - "$TARGET" >/dev/null 2>&1 || true
+# /Applications is the copy Finder was refusing. Fall back only when that folder is absent.
+if [[ "$DEST" == "/Applications" ]]; then
+  install_local_test_app "$SRC" "$ENT_LOCAL"
+  TARGET="/Applications/$APP_NAME"
+  APPSTORE_TARGET="/Applications/$LOCAL_APPSTORE_APP_NAME"
+else
+  TARGET="$DEST/$APP_NAME"
+  APPSTORE_TARGET="$DEST/$LOCAL_APPSTORE_APP_NAME"
+  install_one_local_app "$SRC" "$TARGET" "$ENT_LOCAL"
+  install_one_local_app "$SRC" "$APPSTORE_TARGET" "$ENT_LOCAL"
+fi
 
 installed_arch="$(lipo -archs "$TARGET/Contents/MacOS/SmartTelescopeSort" 2>/dev/null || true)"
 if [[ "$installed_arch" != *"$arch"* ]]; then
   osascript -e "display alert \"Install mismatch\" message \"Expected $arch but installed binary is: $installed_arch\"" 2>/dev/null || true
   echo "Install mismatch: expected $arch, got $installed_arch" >&2
+  exit 1
+fi
+appstore_arch="$(lipo -archs "$APPSTORE_TARGET/Contents/MacOS/SmartTelescopeSort" 2>/dev/null || true)"
+if [[ "$appstore_arch" != *"$arch"* ]]; then
+  osascript -e "display alert \"Install mismatch\" message \"Expected $arch but the App Store-named copy is: $appstore_arch\"" 2>/dev/null || true
+  echo "Install mismatch for $APPSTORE_TARGET: expected $arch, got $appstore_arch" >&2
   exit 1
 fi
 
@@ -132,20 +140,22 @@ else
 fi
 
 osascript <<EOF 2>/dev/null || true
-display dialog "Installed one build only:
+display dialog "Installed the local test build (developer-signed, not App Store signed):
 
 CPU: $cpu_label
 Arch: $installed_arch
-App: $TARGET
+App: $APPSTORE_TARGET
+Also installed: $TARGET
 
 User Manual PDF:
 $pdf_note
 
+Double-click \"Smart Telescope Sort (App Store)\" in /Applications.
 (The PDF is also inside the app — Help → Telescope Data Sort User Manual.)" buttons {"OK"} default button "OK" with title "Install complete"
 EOF
 
-echo "Done: $TARGET ($installed_arch)"
-open -R "$TARGET" 2>/dev/null || true
+echo "Done: $APPSTORE_TARGET ($appstore_arch)"
+open -R "$APPSTORE_TARGET" 2>/dev/null || true
 if [[ -f "${pdf_note:-}" ]]; then
   open -R "$pdf_note" 2>/dev/null || true
 fi
