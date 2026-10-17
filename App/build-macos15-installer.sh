@@ -1,7 +1,13 @@
 #!/bin/bash
 # Build Telescope Data Sort for macOS 15 — Apple Silicon + Intel —
-# then install an ad-hoc local test app over the App Store-named bundle.
+# then install a developer-signed local test app over the App Store-named bundle.
 # Does NOT publish to APP INSTALLS or the App Store.
+# A free price does not matter. Apple Distribution plus
+# com.apple.application-identifier and com.apple.developer.team-identifier
+# is only authorized by a Mac App Store provisioning profile. Double-clicking
+# that .app outside an App Store install is killed by AMFI before main:
+# "The application can't be opened." Developer-signed local builds are the
+# ones that open on this Mac.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -47,6 +53,9 @@ if [[ ! -f "$ROOT/App/Resources/Telescope-Data-Sort-User-Manual.pdf" ]]; then
   python3 "$ROOT/App/Scripts/build-user-manual.py"
 fi
 
+echo "=== Local test app (developer-signed, this Mac only) ==="
+prepare_local_signing "$ENT_LOCAL"
+
 info_plist_ldflags "$PLIST"
 rm -rf "$DIST/staging" "$BINS"
 mkdir -p "$PAYLOADS/arm64" "$PAYLOADS/x86_64" "$BINS"
@@ -83,7 +92,7 @@ build_one() {
 
   chmod +x "$bin"
   compile_asset_catalog "$app" "$ROOT/App/Assets.xcassets" "$BINS/actool-$arch.plist" "$MIN_OS"
-  sign_local_adhoc "$app" "$ENT_LOCAL"
+  sign_local_developer "$app" "$ENT_LOCAL"
   echo "  -> $app ($(lipo -archs "$bin" 2>/dev/null || file "$bin"))"
 }
 
@@ -101,7 +110,11 @@ esac
 HOST_APP="$ROOT/Telescope Data Sort macOS15.app"
 rm -rf "$HOST_APP"
 ditto "$PAYLOADS/${HOST_ARCH}/Telescope Data Sort.app" "$HOST_APP"
-assert_local_adhoc "$HOST_APP"
+xattr -cr "$HOST_APP" 2>/dev/null || true
+if ! local_signature_is_developer "$HOST_APP"; then
+  sign_local_developer "$HOST_APP" "$ENT_LOCAL"
+fi
+assert_local_developer "$HOST_APP"
 echo "Host smoke copy: $HOST_APP"
 
 install_local_test_app "$PAYLOADS/${HOST_ARCH}/Telescope Data Sort.app" "$ENT_LOCAL" "$ROOT"
@@ -129,7 +142,8 @@ echo "HOLD — local Dist only (not published to APP INSTALLS / App Store):"
 echo "  $ZIP_OUT"
 ls -lh "$ZIP_OUT"
 echo
-echo "Installed local test app (ad-hoc): /Applications/$LOCAL_APPSTORE_APP_NAME"
+echo "Installed local test app (developer-signed): /Applications/$LOCAL_APPSTORE_APP_NAME"
+echo "Signing identity: $LOCAL_SIGN_IDENTITY"
 echo "Double-click that file. It is not Apple Distribution-signed."
 echo
 echo "Payloads:"

@@ -15,7 +15,8 @@ Install
 4. Any existing “Telescope Data Sort.app” in /Applications is replaced.
    “Smart Telescope Sort (App Store).app” — the filename Finder shows when Launch
    Services refuses the Apple Distribution build — is replaced with this same
-   local test build (ad-hoc signature, sandbox, no provisioning profile).
+   local test build (Apple Development signature when that certificate is
+   present, sandbox, no App Store provisioning profile).
    A copy under the app's earlier name, “Smart Telescope Sort.app”, is moved to
    the Trash. Settings are kept.
 5. You are asked where to save the User Manual PDF; choose any folder.
@@ -24,7 +25,7 @@ Install
 
 Contents
 - Install.command                          Chooses exactly one CPU build
-- macos-bundle.sh                          Ad-hoc sign and /Applications install
+- macos-bundle.sh                          Developer sign and /Applications install
 - Entitlements-Local.plist                 Sandbox entitlements (no App Store profile)
 - Telescope-Data-Sort-User-Manual.pdf     Copied to the folder you choose
 - Payloads/arm64/                          Apple Silicon build
@@ -48,6 +49,9 @@ affiliated with telescope makers.
 Notes
 - Bundle ID: com.derry.SmartTelescopeSort
 - Open-source freeware
-- Ad-hoc signed local test for this Mac. Not notarized. Not an App Store install.
+- Developer-signed local test for this Mac (Apple Development, else Mac
+  Developer, else Developer ID Application). Not an App Store install.
 - The installed “Smart Telescope Sort (App Store).app” is that local test build.
-  It is not signed with Apple Distribution.
+  It is not signed with Apple Distribution. A free price does not matter:
+  Apple Distribution outside an App Store install is killed by AMFI before
+  main ("The application can't be opened.").

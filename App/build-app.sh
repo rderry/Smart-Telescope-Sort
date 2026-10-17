@@ -17,6 +17,9 @@ BINS="$ROOT/.build-bins"
 ICON_VARIANT="${ICON_VARIANT:-OS27}"
 PLIST="$ROOT/App/Info.plist"
 
+echo "=== Local test app (developer-signed, this Mac only) ==="
+prepare_local_signing "$ENT_LOCAL"
+
 rm -rf "$APP_OUT"
 mkdir -p "$MACOS" "$RESOURCES" "$BINS"
 cp "$PLIST" "$APP_OUT/Contents/Info.plist"
@@ -66,10 +69,11 @@ lipo -create "$BINS/SmartTelescopeSort-arm64" "$BINS/SmartTelescopeSort-x86_64" 
 chmod +x "$MACOS/SmartTelescopeSort"
 # Assets.car before the signature, or the seal is stale and Launch Services refuses the app.
 compile_asset_catalog "$APP_OUT" "$ROOT/App/Assets.xcassets" "$BINS/actool-partial.plist" "$MIN_OS"
-sign_local_adhoc "$APP_OUT" "$ENT_LOCAL"
+sign_local_developer "$APP_OUT" "$ENT_LOCAL"
 rm -rf "$BINS"
 
 install_local_test_app "$APP_OUT" "$ENT_LOCAL" "$ROOT"
 echo "Built: $APP_OUT"
-echo "Installed local test app (ad-hoc): /Applications/$LOCAL_APPSTORE_APP_NAME"
+echo "Installed local test app (developer-signed): /Applications/$LOCAL_APPSTORE_APP_NAME"
+echo "Signing identity: $LOCAL_SIGN_IDENTITY"
 echo "Double-click that file. It is not Apple Distribution-signed."

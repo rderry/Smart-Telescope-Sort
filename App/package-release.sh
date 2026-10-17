@@ -1,12 +1,29 @@
 #!/bin/bash
-# Local test install for this Mac, plus an optional Developer ID zip.
+# Local test install for this Mac, plus an optional dual-CPU zip.
 #
 # The app Rick double-clicks is "Smart Telescope Sort (App Store).app".
-# That name used to be Apple Distribution-signed with application-identifier
-# and team-identifier. Those entitlements need a matching Mac App Store
-# provisioning profile; without one, AMFI kills the process before main and
-# Finder shows "can't be opened" (OK only). This script now installs an
-# ad-hoc signed sandbox build over that filename. It does not upload.
+# A free price does not matter. Apple Distribution plus
+# com.apple.application-identifier and com.apple.developer.team-identifier
+# is only authorized by a Mac App Store provisioning profile. Double-clicking
+# that .app outside an App Store install is killed by AMFI before main:
+# "The application can't be opened." Developer-signed local builds are the
+# ones that open on this Mac.
+#
+# The local app is signed with an Apple Development identity from
+# `security find-identity -p codesigning -v`. When several exist, the one
+# named on a matching development profile is used; otherwise the first
+# Apple Development line is used. If there is none, the script uses Mac
+# Developer, then Developer ID Application. It does not sign that app
+# ad-hoc, and it does not use Apple Distribution or 3rd Party Mac
+# Developer. It does not upload.
+#
+# application-identifier and team-identifier are added only when a development
+# provisioning profile for com.derry.SmartTelescopeSort lists this Mac and the
+# same Apple Development certificate. Otherwise the local app uses
+# Entitlements-Local.plist (sandbox, user-selected read-write, bookmarks,
+# network.client) and no profile. A distribution profile paired with a
+# development certificate, or a development profile paired with Apple
+# Distribution, is the can't-be-opened failure and is not used here.
 #
 # An App Store Connect package is written only when Apple Distribution, the
 # 3rd Party Mac Developer Installer identity, and a Mac App Store distribution
@@ -23,7 +40,6 @@ ICONS="$ROOT/App/Icons"
 RESOURCES_SRC="$ROOT/App/Resources"
 PLIST_MACOS15="$ROOT/App/Info-macOS15.plist"
 ENT_LOCAL="$ROOT/App/Entitlements-Local.plist"
-ENT_DID="$ROOT/App/Entitlements-DeveloperID.plist"
 ENT_MAS="$ROOT/App/Entitlements-AppStore.plist"
 ASSETS="$ROOT/App/Assets.xcassets"
 SDK="$(xcrun --sdk macosx --show-sdk-path)"
@@ -51,7 +67,6 @@ ASC_PKG="$ASC_OUT/TelescopeDataSort-${MARKETING_VERSION}.${BUILD_NUMBER}-MacAppS
 LOCAL_APP="$BINS/local/$LOCAL_APPSTORE_APP_NAME"
 STAMPED_PLIST="$BINS/Info-linked.plist"
 
-DID_ID="$(security find-identity -p codesigning -v 2>/dev/null | awk -F'"' '/Developer ID Application:/{print $2; exit}' || true)"
 DIST_ID="$(security find-identity -p codesigning -v 2>/dev/null | awk -F'"' '/Apple Distribution:/{print $2; exit}' || true)"
 INSTALLER_ID="$(security find-identity -v 2>/dev/null | awk -F'"' '/3rd Party Mac Developer Installer:/{print $2; exit}' || true)"
 
@@ -74,6 +89,8 @@ if [[ ! -f "$ENT_LOCAL" ]]; then
   echo "Missing $ENT_LOCAL" >&2
   exit 1
 fi
+echo "=== Local test app (developer-signed, this Mac only) ==="
+prepare_local_signing "$ENT_LOCAL"
 if [[ ! -f "$RESOURCES_SRC/Telescope-Data-Sort-User-Manual.pdf" ]]; then
   python3 "$ROOT/App/Scripts/build-user-manual.py"
 fi
@@ -123,13 +140,6 @@ stage_app() {
   compile_asset_catalog "$app" "$ASSETS" "$partial" "$MIN_OS"
 }
 
-sign_developer_id() {
-  local app="$1"
-  codesign --force --options runtime --timestamp --entitlements "$ENT_DID" --sign "$DID_ID" "$app"
-  codesign --verify --strict --verbose=2 "$app"
-}
-
-echo "=== Local test app (ad-hoc, this Mac only) ==="
 compile_arch arm64 "$BINS/SmartTelescopeSort-arm64"
 compile_arch x86_64 "$BINS/SmartTelescopeSort-x86_64"
 mkdir -p "$(dirname "$LOCAL_APP")"
@@ -138,15 +148,19 @@ lipo -create \
   "$BINS/SmartTelescopeSort-x86_64" \
   -output "$BINS/SmartTelescopeSort-universal"
 stage_app "$LOCAL_APP" "$BINS/SmartTelescopeSort-universal" "$BINS/actool-local.plist"
-sign_local_adhoc "$LOCAL_APP" "$ENT_LOCAL"
+sign_local_developer "$LOCAL_APP" "$ENT_LOCAL"
 
 install_local_test_app "$LOCAL_APP" "$ENT_LOCAL" "$ROOT"
-echo "Replaced /Applications/${LOCAL_APPSTORE_APP_NAME} with an ad-hoc signed local test app."
+echo "Replaced /Applications/${LOCAL_APPSTORE_APP_NAME} with a developer-signed local test app."
+echo "Signing identity: $LOCAL_SIGN_IDENTITY"
 
 HOST_SMOKE="$ROOT/Telescope Data Sort macOS15.app"
 rm -rf "$HOST_SMOKE"
 ditto "$LOCAL_APP" "$HOST_SMOKE"
-sign_local_adhoc "$HOST_SMOKE" "$ENT_LOCAL"
+xattr -cr "$HOST_SMOKE" 2>/dev/null || true
+if ! local_signature_is_developer "$HOST_SMOKE"; then
+  sign_local_developer "$HOST_SMOKE" "$ENT_LOCAL"
+fi
 
 echo "=== Dual installer ==="
 build_dual_zip() {
@@ -156,12 +170,7 @@ build_dual_zip() {
   for arch in arm64 x86_64; do
     app="$PAYLOADS/$arch/Telescope Data Sort.app"
     stage_app "$app" "$BINS/SmartTelescopeSort-$arch" "$BINS/actool-$arch.plist"
-    if [[ -n "$DID_ID" ]]; then
-      sign_developer_id "$app"
-    else
-      echo "No Developer ID Application identity; dual-installer payload is ad-hoc ($arch)."
-      sign_local_adhoc "$app" "$ENT_LOCAL"
-    fi
+    sign_local_developer "$app" "$ENT_LOCAL"
   done
   cp "$ROOT/App/macos15-installer/Install.command" "$STAGE/Install.command"
   cp "$ROOT/App/macos15-installer/README.txt" "$STAGE/README.txt"
@@ -173,12 +182,9 @@ build_dual_zip() {
   {
     echo
     echo "Edition: Free"
-    echo "Local test: ad-hoc sandbox build replaces \"Smart Telescope Sort (App Store).app\" in /Applications."
-    if [[ -n "$DID_ID" ]]; then
-      echo "Zip payloads: Developer ID signed. Install.command re-signs the installed copies ad-hoc for this Mac."
-    else
-      echo "Zip payloads: ad-hoc (Developer ID Application identity not found)."
-    fi
+    echo "Local test: developer-signed sandbox build replaces \"Smart Telescope Sort (App Store).app\" in /Applications."
+    echo "Signing identity: $LOCAL_SIGN_IDENTITY"
+    echo "Zip payloads use that same identity. Install.command installs those copies locally and does not upload."
     echo "Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } >> "$STAGE/README.txt"
   rm -f "$ZIP_OUT"
@@ -308,10 +314,17 @@ EOF
 run_optional "App Store Connect package" build_asc_upload_only
 
 echo
-echo "DONE — local test install (ad-hoc, not Apple Distribution):"
+echo "DONE — local test install (developer-signed, not Apple Distribution):"
+echo "  Signing identity: $LOCAL_SIGN_IDENTITY"
 echo "  /Applications/$LOCAL_APPSTORE_APP_NAME"
 echo "  /Applications/$LOCAL_TELESCOPE_APP_NAME"
-codesign -dv "/Applications/$LOCAL_APPSTORE_APP_NAME" 2>&1 | awk -F= '/^Signature=|^Identifier=|^TeamIdentifier=/{print}'
+if [[ -n "$LOCAL_SIGN_PROFILE" ]]; then
+  echo "  Development profile embedded for $LOCAL_APP_IDENTIFIER."
+else
+  echo "  No provisioning profile embedded."
+  echo "  Entitlements: sandbox, user-selected read-write, bookmarks, network.client."
+fi
+codesign -dv "/Applications/$LOCAL_APPSTORE_APP_NAME" 2>&1 | awk -F= '/^Signature=|^Identifier=|^TeamIdentifier=|^Authority=/{print}'
 echo
 echo "On this Mac, rebuild and reinstall with:"
 printf '  %q/App/package-release.sh\n' "$ROOT"

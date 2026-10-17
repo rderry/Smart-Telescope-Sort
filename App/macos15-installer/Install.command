@@ -57,7 +57,7 @@ set question to display dialog "This Mac is $cpu_label.
 Only the matching processor build will be installed (the other CPU build in this package is ignored).
 
 Install the local test build into /Applications?
-This replaces Telescope Data Sort and \"Smart Telescope Sort (App Store)\" with an ad-hoc signed copy (not an App Store install). A copy under the earlier name Smart Telescope Sort is moved to the Trash. Your settings are kept.
+This replaces Telescope Data Sort and \"Smart Telescope Sort (App Store)\" with a developer-signed local test copy (not an App Store install). A copy under the earlier name Smart Telescope Sort is moved to the Trash. Your settings are kept.
 
 After the app is installed you will choose where to save the User Manual PDF." buttons {"Cancel", "Install"} default button "Install" with title "Telescope Data Sort installer"
 if button returned of question is "Install" then
@@ -140,7 +140,7 @@ else
 fi
 
 osascript <<EOF 2>/dev/null || true
-display dialog "Installed the local test build (ad-hoc, not App Store signed):
+display dialog "Installed the local test build (developer-signed, not App Store signed):
 
 CPU: $cpu_label
 Arch: $installed_arch
