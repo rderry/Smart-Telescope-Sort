@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sorting="clr-namespace:SmartTelescopeSort.Core.Sorting;assembly=SmartTelescopeSort.Core"
-        Title="Telescope Data Sort" Width="1240" Height="900" MinWidth="1000" MinHeight="760"
+        Title="Telescope Data Sort" Width="1240" Height="960" MinWidth="1000" MinHeight="840"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource WindowBrush}" Foreground="{StaticResource TextBrush}"
         FontFamily="{StaticResource AppFont}" FontSize="13" UseLayoutRounding="True">
@@ -54,13 +54,19 @@
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="290" />
+                <ColumnDefinition Width="320" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <!-- Sidebar -->
-            <DockPanel Background="{StaticResource SidebarBrush}">
-                <StackPanel DockPanel.Dock="Top" Margin="20,16,20,0">
+            <ScrollViewer Background="{StaticResource SidebarBrush}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid MinHeight="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Margin="20,16,20,0">
                     <Button x:Name="LogoButton" Style="{StaticResource LinkButton}" HorizontalAlignment="Center" Margin="0,4,0,8"
                             ToolTip="Open bigskyastro.com" Click="Home_Click" Cursor="Hand">
                         <Border Width="250" Height="104" CornerRadius="10">
@@ -94,7 +100,7 @@
                     </Border>
                 </StackPanel>
 
-                <StackPanel DockPanel.Dock="Bottom" Margin="20,8,20,16">
+                <StackPanel Grid.Row="2" Margin="20,8,20,16">
                     <Button Style="{StaticResource LinkButton}" Click="ManualPdf_Click" HorizontalAlignment="Left" Margin="0,0,0,6">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE82D;" Style="{StaticResource Icon}" Margin="0,0,8,0" />
@@ -123,7 +129,7 @@
                                 </Border>
                                 <TextBlock DockPanel.Dock="Right" Text="&#xE8A7;" Style="{StaticResource Icon}" Foreground="#D9FFFFFF" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Astronomy Observation Planner" FontSize="11.5" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="Astronomy Observation Planner" FontSize="12" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
                                     <TextBlock Text="Mac App Store" FontSize="10" Foreground="#C7FFFFFF" />
                                 </StackPanel>
                             </DockPanel>
@@ -138,7 +144,7 @@
                                 </Border>
                                 <TextBlock DockPanel.Dock="Right" Text="&#xE8A7;" Style="{StaticResource Icon}" Foreground="#D9FFFFFF" VerticalAlignment="Center" />
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Smart Telescope Planner" FontSize="11.5" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="Smart Telescope Planner" FontSize="12" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
                                     <TextBlock Text="iPhone &amp; iPad App Store" FontSize="10" Foreground="#C7FFFFFF" />
                                 </StackPanel>
                             </DockPanel>
@@ -146,8 +152,8 @@
                     </Button>
                     <TextBlock Text="Nothing moves until you press Sort eligible files." FontSize="10" Foreground="{StaticResource SubtitleBrush}" TextWrapping="Wrap" />
                 </StackPanel>
-                <Border />
-            </DockPanel>
+                </Grid>
+            </ScrollViewer>
 
             <!-- Workspace -->
             <Grid Grid.Column="1" Background="{StaticResource WorkspaceBrush}">
@@ -167,7 +173,7 @@
 
                     <!-- Header and status lights -->
                     <DockPanel>
-                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                        <StackPanel DockPanel.Dock="Right" VerticalAlignment="Top" Margin="12,0,0,0">
                             <ContentControl Content="{Binding CaptureLight}" ContentTemplate="{StaticResource StatusLightTemplate}" />
                             <ContentControl Content="{Binding TargetFolderLight}" ContentTemplate="{StaticResource StatusLightTemplate}" />
                             <ContentControl Content="{Binding BackupFolderLight}" ContentTemplate="{StaticResource StatusLightTemplate}" />
@@ -183,13 +189,14 @@
                     <DockPanel Grid.Row="1" Margin="0,12,0,4">
                         <TextBlock DockPanel.Dock="Left" Text="&#xE8B7;" Style="{StaticResource Icon}" Foreground="{StaticResource FolderIconBrush}" FontSize="16"
                                    VerticalAlignment="Center" Width="26" />
-                        <TextBlock DockPanel.Dock="Right" Text="{Binding ExcludedText}" FontSize="11" Foreground="{StaticResource WarnTextBrush}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding ExcludedText}" FontSize="11" Foreground="{StaticResource SubtitleBrush}" VerticalAlignment="Center" Margin="10,0,0,0"
+                                   Visibility="{Binding HasCaptureFolder, Converter={StaticResource BoolVisible}}" />
                         <Button DockPanel.Dock="Right" Content="Choose…" Style="{StaticResource BorderedButton}" Click="ChooseCapture_Click"
                                 IsEnabled="{Binding CanChangeFolders}" VerticalAlignment="Center" />
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="CAPTURE FOLDER · WHERE THE IMAGES ARE LOCATED" Style="{StaticResource HeavyLabel}" />
                             <TextBlock Text="{Binding CaptureFolderText}" ToolTip="{Binding CaptureFolderText}" Style="{StaticResource Mono}" FontSize="13" FontWeight="Medium"
-                                       TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
+                                       TextWrapping="Wrap" MaxHeight="42" TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
                                 <TextBlock.Foreground>
                                     <Binding Path="HasCaptureFolder" Converter="{StaticResource BoolBrush}" ConverterParameter="TextBrush|WarnTextBrush" />
                                 </TextBlock.Foreground>
@@ -211,12 +218,12 @@
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="TARGET FOLDER · WHERE YOU WANT THEM PUT" Style="{StaticResource HeavyLabel}" />
                             <TextBlock Text="{Binding TargetFolderText}" ToolTip="{Binding TargetFolderText}" Style="{StaticResource Mono}" FontSize="12" FontWeight="Medium"
-                                       TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
+                                       TextWrapping="Wrap" MaxHeight="40" TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
                                 <TextBlock.Foreground>
                                     <Binding Path="TargetFolderSet" Converter="{StaticResource BoolBrush}" ConverterParameter="TextBrush|WarnTextBrush" />
                                 </TextBlock.Foreground>
                             </TextBlock>
-                            <TextBlock Text="{Binding TargetFolderNote}" FontSize="10" FontWeight="Medium" TextWrapping="Wrap" MaxHeight="30"
+                            <TextBlock Text="{Binding TargetFolderNote}" ToolTip="{Binding TargetFolderNote}" FontSize="11" FontWeight="Medium" TextWrapping="Wrap"
                                        Visibility="{Binding HasTargetFolderNote, Converter={StaticResource BoolVisible}}" Margin="0,1,10,0">
                                 <TextBlock.Foreground>
                                     <Binding Path="TargetFolderNoteIsWarning" Converter="{StaticResource BoolBrush}" ConverterParameter="WarnTextBrush|LabelBrush" />
@@ -236,7 +243,7 @@
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="BACKUP STORAGE" Style="{StaticResource HeavyLabel}" />
                             <TextBlock Text="{Binding BackupFolderText}" ToolTip="{Binding BackupFolderText}" Style="{StaticResource Mono}" FontSize="12" FontWeight="Medium"
-                                       TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
+                                       TextWrapping="Wrap" MaxHeight="40" TextTrimming="CharacterEllipsis" Margin="0,2,10,0">
                                 <TextBlock.Foreground>
                                     <Binding Path="BackupFolderSet" Converter="{StaticResource BoolBrush}" ConverterParameter="TextBrush|WarnTextBrush" />
                                 </TextBlock.Foreground>
@@ -259,6 +266,12 @@
                                 <StackPanel>
                                     <TextBlock Text="DESTINATION" Style="{StaticResource HeavyLabel}" />
                                     <TextBlock Text="Choose a year and month" FontSize="16" FontWeight="SemiBold" Margin="0,4,0,4" />
+                                    <TextBlock Text="{Binding DestinationLocation}" ToolTip="{Binding DestinationLocation}" FontFamily="{StaticResource MonoFont}"
+                                               FontSize="12" FontWeight="Medium" TextWrapping="Wrap" Margin="0,0,10,4">
+                                        <TextBlock.Foreground>
+                                            <Binding Path="HasDestinationLocation" Converter="{StaticResource BoolBrush}" ConverterParameter="TextBrush|WarnTextBrush" />
+                                        </TextBlock.Foreground>
+                                    </TextBlock>
                                     <TextBlock Text="Objects decode into Targets {year}\{DSO} from smart-telescope layouts, or from object-named folders for any other telescope or camera."
                                                FontSize="11" Foreground="{StaticResource SubtitleBrush}" TextWrapping="Wrap" Margin="0,0,10,0" />
                                 </StackPanel>
@@ -426,7 +439,7 @@
                     <!-- Status -->
                     <DockPanel Grid.Row="9" Margin="0,8,0,0">
                         <TextBlock DockPanel.Dock="Left" Text="&#xE946;" Style="{StaticResource Icon}" Foreground="{StaticResource LabelBrush}" Margin="0,1,8,0" />
-                        <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" FontSize="11" Foreground="{StaticResource LabelBrush}" TextWrapping="Wrap" MaxHeight="48" />
+                        <TextBlock Text="{Binding Status}" ToolTip="{Binding Status}" FontSize="11" Foreground="{StaticResource LabelBrush}" TextWrapping="Wrap" />
                     </DockPanel>
                 </Grid>
             </Grid>

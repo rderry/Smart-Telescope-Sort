@@ -45,6 +45,19 @@ public static partial class TargetsLocation
         return null;
     }
 
+    /// <summary>
+    /// The location shown in the destination block: the folder images are set to, or a prompt when nothing is chosen.
+    /// </summary>
+    public static string Shown(string? chosenTarget, string captureFolder)
+    {
+        if (string.IsNullOrEmpty(chosenTarget) && captureFolder.Length == 0)
+            return "No location set — choose a Capture Folder or a Target Folder.";
+        var root = Resolve(chosenTarget, captureFolder);
+        if (root.Length == 0)
+            return "No location set — choose a Capture Folder or a Target Folder.";
+        return $"Set to {R.Combine(root, "Targets {year}/{object}")}";
+    }
+
     /// <summary>Where sorted images really go, shown under the Target Folder; a warning when that isn't the folder chosen.</summary>
     public static (string Text, bool Warning)? Note(string? chosenTarget, string captureFolder)
     {

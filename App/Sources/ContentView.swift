@@ -143,6 +143,17 @@ final class SortViewModel: ObservableObject {
             : ". The folder chosen holds no Targets {year} folder, so the folder above it that does is used."), true)
     }
 
+    /// True once a Capture Folder or Target Folder is chosen, so the destination block can show that location.
+    var hasDestinationLocation: Bool { hasCaptureFolder || libraryFolders[.originals] != nil }
+
+    /// Where sorted images are set to go, shown in the destination block.
+    var destinationLocation: String {
+        guard hasDestinationLocation else {
+            return "No location set — choose a Capture Folder or a Target Folder."
+        }
+        return "Set to \(targetsRoot.path)/Targets {year}/{object}"
+    }
+
     private static func folderHoldingTargets(from url: URL) -> URL? {
         var folder = url.standardizedFileURL
         while folder.pathComponents.count > 2 {
@@ -1987,8 +1998,8 @@ struct ContentView: View {
                     .frame(width: 26, height: 26)
                     .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.18)))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.system(size: 11.5, weight: .bold)).foregroundStyle(.white)
-                        .lineLimit(1).minimumScaleFactor(0.8)
+                    Text(title).font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle).font(.system(size: 10)).foregroundStyle(Color.white.opacity(0.78))
                 }
                 Spacer(minLength: 2)
@@ -2027,7 +2038,7 @@ struct ContentView: View {
 
     private var workspace: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("CAPTURE LIBRARY")
                         .font(.system(size: 9, weight: .heavy))
@@ -2043,10 +2054,13 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     statusLight(!model.hasCaptureFolder ? "No Capture Folder chosen"
                                 : model.sourceAvailable ? "Capture Folder available" : "Capture Folder unavailable",
+                                detail: model.hasCaptureFolder ? model.sourcePath : nil,
                                 color: !model.hasCaptureFolder ? .red : model.sourceAvailable ? .green : .orange)
                     ForEach(LibraryFolder.allCases, id: \.self) { folder in
                         let chosen = model.libraryFolders[folder] != nil
-                        statusLight("\(folder.title) \(chosen ? "selected" : "not selected")", color: chosen ? .green : .red)
+                        statusLight("\(folder.title) \(chosen ? "selected" : "not selected")",
+                                    detail: model.libraryFolders[folder]?.path,
+                                    color: chosen ? .green : .red)
                     }
                 }
             }
@@ -2061,14 +2075,19 @@ struct ContentView: View {
                     Text(model.hasCaptureFolder ? model.sourcePath : "Not chosen — click Choose… to pick the folder where your images are")
                         .font(.system(size: 13, weight: .medium, design: .monospaced))
                         .foregroundStyle(model.hasCaptureFolder ? Color(red: 0.92, green: 0.94, blue: 1.0) : Color(red: 0.90, green: 0.70, blue: 0.35))
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .help(model.hasCaptureFolder ? model.sourcePath : "Not chosen")
                 }
                 Spacer()
                 Button("Choose…") { model.chooseSourceFolder() }
                     .disabled(model.isBusy)
                     .buttonStyle(.bordered)
-                Text("\(model.excluded) folders are skipped.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color(red: 0.90, green: 0.70, blue: 0.35))
+                if model.hasCaptureFolder {
+                    Text("\(model.excluded) folders are skipped.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
+                }
             }
             .padding(.vertical, 8)
 
@@ -2082,6 +2101,13 @@ struct ContentView: View {
                         Text("DESTINATION").font(.system(size: 9, weight: .heavy))
                             .foregroundStyle(Color(red: 0.51, green: 0.58, blue: 0.71))
                         Text("Choose a year and month").font(.system(size: 16, weight: .semibold))
+                        Text(model.destinationLocation)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(model.hasDestinationLocation
+                                             ? Color(red: 0.92, green: 0.94, blue: 1.0)
+                                             : Color(red: 0.90, green: 0.70, blue: 0.35))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .help(model.destinationLocation)
                         Text("Objects decode into Targets {year}/{DSO} from smart-telescope layouts, or from object-named folders for any other telescope or camera.")
                             .font(.system(size: 11))
                             .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
@@ -2292,11 +2318,23 @@ struct ContentView: View {
         }
     }
 
-    private func statusLight(_ text: String, color: Color) -> some View {
-        HStack(spacing: 8) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text(text).font(.system(size: 11)).foregroundStyle(color)
+    private func statusLight(_ text: String, detail: String? = nil, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 8) {
+                Circle().fill(color).frame(width: 7, height: 7)
+                Text(text).font(.system(size: 11)).foregroundStyle(color).lineLimit(1)
+            }
+            if let detail, !detail.isEmpty {
+                Text(detail)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.58, green: 0.65, blue: 0.78))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(detail)
+                    .padding(.leading, 15)
+            }
         }
+        .frame(maxWidth: 280, alignment: .leading)
     }
 
     private func libraryRow(_ folder: LibraryFolder) -> some View {
@@ -2312,13 +2350,15 @@ struct ContentView: View {
                 Text(url?.path ?? (folder == .originals ? "Not set — Targets {year} go inside the Capture Folder" : "Not set"))
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(url == nil ? Color(red: 0.90, green: 0.70, blue: 0.35) : Color(red: 0.92, green: 0.94, blue: 1.0))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.middle)
+                    .help(url?.path ?? "Not set")
                 if folder == .originals, let note = model.targetFolderNote {
                     Text(note.text)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(note.warning ? Color(red: 0.90, green: 0.70, blue: 0.35) : Color(red: 0.51, green: 0.58, blue: 0.71))
-                        .lineLimit(2)
+                        .lineLimit(4)
+                        .help(note.text)
                 }
             }
             Spacer()

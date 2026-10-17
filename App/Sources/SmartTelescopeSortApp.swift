@@ -10,9 +10,9 @@ struct SmartTelescopeSortApp: App {
     var body: some Scene {
         WindowGroup(windowTitle) {
             ContentView()
-                .frame(minWidth: 1000, minHeight: 860)
+                .frame(minWidth: 1000, minHeight: 900)
         }
-        .defaultSize(width: 1240, height: 900)
+        .defaultSize(width: 1240, height: 960)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(after: .appInfo) {

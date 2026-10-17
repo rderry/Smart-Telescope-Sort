@@ -41,9 +41,11 @@ public sealed record Choice(string Id, string Title)
 }
 
 /// <summary>A coloured dot and its text; Color names a theme brush (Green, Red or Orange).</summary>
-public sealed record StatusLight(string Text, string Color)
+public sealed record StatusLight(string Text, string Color, string? Detail = null)
 {
-    public override string ToString() => Text;
+    public bool HasDetail => !string.IsNullOrWhiteSpace(Detail);
+
+    public override string ToString() => HasDetail ? $"{Text}. {Detail}" : Text;
 }
 
 /// <summary>
@@ -271,7 +273,8 @@ public sealed partial class MainViewModel : Observable
     private void NotifyFoldersChanged() => OnPropertiesChanged(
         nameof(TargetFolderPath), nameof(BackupFolderPath), nameof(TargetFolderText), nameof(BackupFolderText), nameof(TargetFolderSet),
         nameof(BackupFolderSet), nameof(TargetFolderScope), nameof(BackupFolderScope), nameof(TargetFolderNote), nameof(TargetFolderNoteIsWarning),
-        nameof(HasTargetFolderNote), nameof(BackupNote), nameof(TargetFolderLight), nameof(BackupFolderLight));
+        nameof(HasTargetFolderNote), nameof(BackupNote), nameof(TargetFolderLight), nameof(BackupFolderLight),
+        nameof(HasDestinationLocation), nameof(DestinationLocation));
 
     /// <summary>Sets a library folder without asking, e.g. from the command line.</summary>
     public void UseLibraryFolder(LibraryFolder folder, string path, bool saveAsDefault)
@@ -340,6 +343,12 @@ public sealed partial class MainViewModel : Observable
     public bool TargetFolderNoteIsWarning => Note?.Warning ?? false;
     public bool HasTargetFolderNote => Note is not null;
 
+    /// <summary>True once a Capture Folder or Target Folder is chosen, so the destination block can show that location.</summary>
+    public bool HasDestinationLocation => HasCaptureFolder || TargetFolderSet;
+
+    /// <summary>Where sorted images are set to go, shown in the destination block.</summary>
+    public string DestinationLocation => TargetsLocation.Shown(TargetFolderPath, SourcePath);
+
     // MARK: Capture Folder and scan state
 
     private string _sourcePath = "";
@@ -351,7 +360,7 @@ public sealed partial class MainViewModel : Observable
         {
             if (!Set(ref _sourcePath, value)) return;
             OnPropertiesChanged(nameof(HasCaptureFolder), nameof(CaptureFolderText), nameof(CaptureLight), nameof(TargetFolderNote),
-                nameof(TargetFolderNoteIsWarning), nameof(HasTargetFolderNote));
+                nameof(TargetFolderNoteIsWarning), nameof(HasTargetFolderNote), nameof(HasDestinationLocation), nameof(DestinationLocation));
         }
     }
 
@@ -371,9 +380,13 @@ public sealed partial class MainViewModel : Observable
     }
 
     public StatusLight CaptureLight => !HasCaptureFolder ? new("No Capture Folder chosen", "Red")
-        : SourceAvailable ? new("Capture Folder available", "Green") : new("Capture Folder unavailable", "Orange");
-    public StatusLight TargetFolderLight => TargetFolderSet ? new("Target Folder selected", "Green") : new("Target Folder not selected", "Red");
-    public StatusLight BackupFolderLight => BackupFolderSet ? new("Backup Storage selected", "Green") : new("Backup Storage not selected", "Red");
+        : SourceAvailable ? new("Capture Folder available", "Green", SourcePath) : new("Capture Folder unavailable", "Orange", SourcePath);
+    public StatusLight TargetFolderLight => TargetFolderSet
+        ? new("Target Folder selected", "Green", TargetFolderPath)
+        : new("Target Folder not selected", "Red");
+    public StatusLight BackupFolderLight => BackupFolderSet
+        ? new("Backup Storage selected", "Green", BackupFolderPath)
+        : new("Backup Storage not selected", "Red");
 
     private string _excluded = "Targets …";
 

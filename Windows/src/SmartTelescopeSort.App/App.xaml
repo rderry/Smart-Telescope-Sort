@@ -16,9 +16,24 @@
             <dialogs:GroupStatusConverter x:Key="GroupStatus" />
 
             <DataTemplate x:Key="StatusLightTemplate">
-                <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <Ellipse Width="7" Height="7" Fill="{Binding Color, Converter={StaticResource ThemeBrush}}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <TextBlock Text="{Binding Text}" FontSize="11" Foreground="{Binding Color, Converter={StaticResource ThemeBrush}}" />
+                <StackPanel Margin="0,1,0,3" MaxWidth="280" ToolTip="{Binding Detail}">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="7" Height="7" Fill="{Binding Color, Converter={StaticResource ThemeBrush}}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding Text}" FontSize="11" Foreground="{Binding Color, Converter={StaticResource ThemeBrush}}" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Detail}" FontFamily="{StaticResource MonoFont}" FontSize="11" FontWeight="Medium"
+                               Foreground="{StaticResource SubtitleBrush}" TextTrimming="CharacterEllipsis" Margin="15,1,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasDetail}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StackPanel>
             </DataTemplate>
 
