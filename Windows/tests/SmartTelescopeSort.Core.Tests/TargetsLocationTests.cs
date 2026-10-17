@@ -18,6 +18,19 @@ public sealed class TargetsLocationTests
     }
 
     [Fact]
+    public void ShownNamesTheFolderImagesAreSetTo()
+    {
+        using var s = new Scratch();
+        Directory.CreateDirectory(s["Library"]);
+        Directory.CreateDirectory(s["Captures"]);
+        Assert.Equal($"Set to {Fixture.P($"{s.Root}/Library/Targets {{year}}/{{object}}")}",
+            TargetsLocation.Shown(s["Library"], s["Captures"]));
+        Assert.Equal($"Set to {Fixture.P($"{s.Root}/Captures/Targets {{year}}/{{object}}")}",
+            TargetsLocation.Shown(null, s["Captures"]));
+        Assert.Equal("No location set — choose a Capture Folder or a Target Folder.", TargetsLocation.Shown(null, ""));
+    }
+
+    [Fact]
     public void WithoutAChoiceTargetsGoInsideTheCaptureFolder()
     {
         using var s = new Scratch();
