@@ -12,14 +12,20 @@ Install
 3. The installer detects Apple Silicon vs Intel (hardware, not Rosetta)
    and installs ONLY that CPU’s build into /Applications.
    The other processor build in the package is not installed.
-4. Any existing “Telescope Data Sort.app” in /Applications is replaced. A copy under the app's
-   earlier name, “Smart Telescope Sort.app”, is moved to the Trash. Settings are kept.
+4. Any existing “Telescope Data Sort.app” in /Applications is replaced.
+   “Smart Telescope Sort (App Store).app” — the filename Finder shows when Launch
+   Services refuses the Apple Distribution build — is replaced with this same
+   local test build (ad-hoc signature, sandbox, no provisioning profile).
+   A copy under the app's earlier name, “Smart Telescope Sort.app”, is moved to
+   the Trash. Settings are kept.
 5. You are asked where to save the User Manual PDF; choose any folder.
    (The PDF also remains inside the app: Help → Telescope Data Sort User Manual.)
 6. Quarantine flags from email download are cleared automatically.
 
 Contents
 - Install.command                          Chooses exactly one CPU build
+- macos-bundle.sh                          Ad-hoc sign and /Applications install
+- Entitlements-Local.plist                 Sandbox entitlements (no App Store profile)
 - Telescope-Data-Sort-User-Manual.pdf     Copied to the folder you choose
 - Payloads/arm64/                          Apple Silicon build
 - Payloads/x86_64/                         Intel build
@@ -42,4 +48,6 @@ affiliated with telescope makers.
 Notes
 - Bundle ID: com.derry.SmartTelescopeSort
 - Open-source freeware
-- Ad-hoc signed; not notarized. Mac App Store build is separate.
+- Ad-hoc signed local test for this Mac. Not notarized. Not an App Store install.
+- The installed “Smart Telescope Sort (App Store).app” is that local test build.
+  It is not signed with Apple Distribution.
